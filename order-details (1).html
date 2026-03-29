@@ -1,0 +1,884 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
+<title>Order Detail — MC Store Admin</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@800;900&family=DM+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+:root{
+  --blue:#1a56db;--blue-dk:#1347c8;--blue-lt:#eff6ff;--blue-md:#dbeafe;
+  --white:#fff;--bg:#f0f7ff;--text:#0f172a;--muted:#64748b;--border:#e2e8f0;
+  --green:#16a34a;--green-lt:#dcfce7;--green-md:#bbf7d0;
+  --red:#dc2626;--red-lt:#fef2f2;
+  --gold:#f59e0b;--gold-lt:#fefce8;
+  --purple:#7c3aed;--purple-lt:#f5f3ff;
+  --orange:#ea580c;--orange-lt:#fff7ed;
+}
+html,body{min-height:100vh;background:var(--bg);font-family:'DM Sans',sans-serif;color:var(--text);-webkit-font-smoothing:antialiased;}
+@keyframes spin{to{transform:rotate(360deg);}}
+@keyframes slideUp{from{opacity:0;transform:translateY(16px);}to{opacity:1;transform:none;}}
+@keyframes pulse{0%,100%{opacity:1;}50%{opacity:.5;}}
+
+/* ── TOPBAR ── */
+.topbar{position:sticky;top:0;z-index:50;background:var(--white);border-bottom:1.5px solid var(--border);
+  padding:0 1.25rem;height:64px;display:flex;align-items:center;gap:.75rem;
+  box-shadow:0 2px 10px rgba(26,86,219,.06);}
+.back-btn{width:40px;height:40px;border-radius:12px;background:var(--bg);border:1.5px solid var(--border);
+  display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--muted);
+  text-decoration:none;transition:all .2s;flex-shrink:0;}
+.back-btn:hover{color:var(--blue);border-color:var(--blue);background:var(--blue-lt);}
+.topbar-title{font-weight:800;font-size:1.05rem;flex:1;}
+.topbar-actions{display:flex;gap:.5rem;}
+.topbar-icon-btn{width:38px;height:38px;border-radius:10px;background:var(--bg);border:1.5px solid var(--border);
+  display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--muted);transition:all .2s;font-size:.85rem;}
+.topbar-icon-btn:hover{color:var(--blue);border-color:var(--blue);background:var(--blue-lt);}
+
+/* ── LAYOUT ── */
+.container{padding:1.25rem 1.25rem 6rem;max-width:780px;margin:0 auto;}
+
+/* ── STATUS HERO BANNER ── */
+.status-hero{border-radius:20px;padding:1.5rem;margin-bottom:1.25rem;display:flex;
+  align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap;}
+.status-hero.pending   {background:var(--gold-lt);border:1.5px solid #fde68a;}
+.status-hero.processing{background:var(--blue-lt);border:1.5px solid var(--blue-md);}
+.status-hero.shipped   {background:var(--purple-lt);border:1.5px solid #ddd6fe;}
+.status-hero.delivered {background:var(--green-lt);border:1.5px solid var(--green-md);}
+.status-hero.cancelled {background:var(--red-lt);border:1.5px solid #fecaca;}
+.status-hero-left{display:flex;align-items:center;gap:.85rem;}
+.status-icon{width:48px;height:48px;border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:1.3rem;flex-shrink:0;}
+.status-hero.pending    .status-icon{background:#fde68a;color:var(--gold);}
+.status-hero.processing .status-icon{background:var(--blue-md);color:var(--blue);}
+.status-hero.shipped    .status-icon{background:#ddd6fe;color:var(--purple);}
+.status-hero.delivered  .status-icon{background:var(--green-md);color:var(--green);}
+.status-hero.cancelled  .status-icon{background:#fecaca;color:var(--red);}
+.status-label{font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;opacity:.7;margin-bottom:2px;}
+.status-text{font-size:1rem;font-weight:800;}
+.order-number-badge{font-family:monospace;font-size:.82rem;font-weight:800;padding:5px 12px;
+  border-radius:8px;background:rgba(255,255,255,.6);color:var(--text);}
+
+/* ── COMMAND BAR ── */
+.command-bar{background:linear-gradient(135deg,var(--blue) 0%,var(--blue-dk) 100%);
+  border-radius:18px;padding:1.25rem;margin-bottom:1.25rem;
+  box-shadow:0 8px 25px rgba(26,86,219,.2);}
+.command-bar-label{color:rgba(255,255,255,.7);font-size:.7rem;font-weight:700;
+  text-transform:uppercase;letter-spacing:.1em;margin-bottom:.85rem;}
+.command-btns{display:grid;gap:.75rem;}
+.command-btns.two{grid-template-columns:1fr 1fr;}
+.command-btns.one{grid-template-columns:1fr;}
+
+.btn{height:50px;border-radius:14px;border:none;font-family:inherit;font-weight:800;
+  font-size:.9rem;cursor:pointer;display:flex;align-items:center;justify-content:center;
+  gap:8px;transition:all .2s;padding:0 1.25rem;width:100%;}
+.btn-approve{background:#22c55e;color:white;box-shadow:0 4px 0 #15803d;}
+.btn-approve:hover:not(:disabled){background:#16a34a;transform:translateY(-2px);box-shadow:0 6px 0 #14532d;}
+.btn-cancel {background:var(--red);color:white;box-shadow:0 4px 0 #991b1b;}
+.btn-cancel:hover:not(:disabled){background:#c02020;transform:translateY(-2px);box-shadow:0 6px 0 #7f1d1d;}
+.btn-book   {background:var(--white);color:var(--blue);box-shadow:0 4px 0 rgba(0,0,0,.15);}
+.btn-book:hover:not(:disabled){background:var(--blue-lt);transform:translateY(-2px);}
+.btn-delivered{background:var(--green-lt);color:var(--green);box-shadow:0 4px 0 var(--green-md);}
+.btn-delivered:hover:not(:disabled){background:var(--green-md);transform:translateY(-2px);}
+.btn:active:not(:disabled){transform:translateY(2px) !important;box-shadow:none !important;}
+.btn:disabled{opacity:.55;cursor:not-allowed;transform:none !important;box-shadow:none !important;}
+
+/* ── CARDS ── */
+.card{background:var(--white);border:1.5px solid var(--border);border-radius:20px;
+  padding:1.35rem;margin-bottom:1.1rem;box-shadow:0 4px 15px rgba(26,86,219,.03);
+  animation:slideUp .35s ease both;}
+.card-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:1.1rem;}
+.card-title{font-size:.75rem;font-weight:800;color:var(--muted);text-transform:uppercase;
+  letter-spacing:.09em;display:flex;align-items:center;gap:8px;}
+.card-title i{color:var(--blue);font-size:.9rem;}
+
+/* ── INFO ROWS ── */
+.info-rows{display:flex;flex-direction:column;gap:.1rem;}
+.info-row{display:flex;align-items:flex-start;gap:.75rem;padding:.75rem 0;
+  border-bottom:1px solid var(--border);}
+.info-row:last-child{border-bottom:none;}
+.info-icon-wrap{width:34px;height:34px;border-radius:10px;background:var(--blue-lt);
+  color:var(--blue);display:flex;align-items:center;justify-content:center;
+  flex-shrink:0;font-size:.82rem;}
+.info-label{font-size:.7rem;font-weight:700;color:var(--muted);text-transform:uppercase;
+  letter-spacing:.05em;margin-bottom:3px;}
+.info-value{font-size:.93rem;font-weight:700;color:var(--text);line-height:1.4;}
+.info-value.mono{font-family:monospace;font-size:.88rem;}
+.info-value.muted{color:var(--muted);font-weight:600;}
+
+/* ── LOGISTICS CARD ── */
+.logistics-grid{display:grid;grid-template-columns:1fr 1fr;gap:.85rem;margin-bottom:1rem;}
+@media(max-width:500px){.logistics-grid{grid-template-columns:1fr;}}
+.logistics-box{background:var(--bg);border:1.5px solid var(--border);border-radius:14px;
+  padding:.9rem;text-align:center;}
+.logistics-box .lbl{font-size:.68rem;font-weight:700;color:var(--muted);text-transform:uppercase;
+  letter-spacing:.06em;margin-bottom:.4rem;}
+.logistics-box .val{font-size:.92rem;font-weight:800;color:var(--text);}
+.logistics-box.highlight{background:var(--blue-lt);border-color:var(--blue-md);}
+.logistics-box.highlight .val{color:var(--blue);}
+
+.courier-pill{display:inline-flex;align-items:center;gap:7px;padding:8px 14px;
+  border-radius:12px;font-weight:800;font-size:.83rem;margin-bottom:.85rem;}
+.courier-pill.exists {background:var(--blue-lt);color:var(--blue);border:1.5px solid var(--blue-md);}
+.courier-pill.missing{background:var(--gold-lt);color:var(--gold);border:1.5px solid #fde68a;}
+.courier-pill.none   {background:var(--red-lt);color:var(--red);border:1.5px solid #fecaca;}
+
+/* ── TRACKING BOX ── */
+.tracking-box{background:var(--green-lt);border:2px solid var(--green-md);border-radius:16px;
+  padding:1.1rem;display:flex;align-items:center;justify-content:space-between;gap:.75rem;
+  box-shadow:0 4px 16px rgba(22,163,74,.1);}
+.tracking-left{display:flex;align-items:center;gap:.75rem;}
+.tracking-left i{font-size:1.4rem;color:var(--green);}
+.tracking-label{font-size:.65rem;font-weight:700;text-transform:uppercase;color:var(--green);opacity:.8;margin-bottom:2px;}
+.tracking-id{font-size:.88rem;font-weight:800;color:var(--green);font-family:monospace;}
+.copy-btn{background:var(--white);color:var(--green);border:1.5px solid var(--green-md);
+  padding:8px 14px;border-radius:10px;font-weight:800;font-size:.78rem;cursor:pointer;
+  transition:all .2s;display:flex;align-items:center;gap:5px;white-space:nowrap;}
+.copy-btn:hover{background:var(--green);color:white;}
+
+.label-link{display:inline-flex;align-items:center;gap:6px;margin-top:.65rem;
+  color:var(--blue);font-size:.8rem;font-weight:700;text-decoration:none;
+  background:var(--blue-lt);border:1px solid var(--blue-md);border-radius:8px;
+  padding:6px 12px;transition:all .2s;}
+.label-link:hover{background:var(--blue-md);}
+
+/* ── ITEMS ── */
+.item-list{display:flex;flex-direction:column;gap:.85rem;}
+.order-item{display:flex;align-items:center;gap:.85rem;padding:.65rem 0;
+  border-bottom:1px solid var(--border);}
+.order-item:last-child{border-bottom:none;}
+.item-img{width:58px;height:58px;border-radius:12px;object-fit:cover;
+  background:var(--blue-lt);border:1px solid var(--border);flex-shrink:0;}
+.item-img-ph{width:58px;height:58px;border-radius:12px;background:var(--blue-lt);
+  display:flex;align-items:center;justify-content:center;color:var(--blue);
+  font-size:1.3rem;flex-shrink:0;}
+.item-name{font-size:.88rem;font-weight:700;line-height:1.35;margin-bottom:3px;}
+.item-meta{font-size:.75rem;color:var(--muted);font-weight:600;}
+.item-total{font-weight:800;font-size:.9rem;color:var(--text);white-space:nowrap;}
+
+/* ── FINANCIALS ── */
+.fin-rows{display:flex;flex-direction:column;gap:.5rem;}
+.fin-row{display:flex;justify-content:space-between;align-items:center;font-size:.88rem;}
+.fin-row .label{color:var(--muted);font-weight:600;}
+.fin-row .value{font-weight:700;color:var(--text);}
+.fin-row.discount .value{color:var(--green);}
+.fin-row.total{border-top:2px dashed var(--border);padding-top:.75rem;margin-top:.25rem;}
+.fin-row.total .label{font-weight:800;font-size:.95rem;color:var(--text);}
+.fin-row.total .value{font-weight:900;font-size:1.15rem;color:var(--blue);}
+
+/* ── PAYMENT BADGE ── */
+.pay-badge{display:inline-flex;align-items:center;gap:6px;padding:7px 14px;
+  border-radius:10px;font-size:.8rem;font-weight:800;}
+.pay-paid{background:var(--green-lt);color:var(--green);border:1.5px solid var(--green-md);}
+.pay-pending{background:var(--gold-lt);color:var(--gold);border:1.5px solid #fde68a;}
+.pay-cod{background:var(--orange-lt);color:var(--orange);border:1.5px solid #fed7aa;}
+
+/* ── TIMELINE ── */
+.timeline{display:flex;flex-direction:column;gap:0;}
+.tl-item{display:flex;gap:.85rem;position:relative;padding-bottom:1.1rem;}
+.tl-item:last-child{padding-bottom:0;}
+.tl-dot-wrap{display:flex;flex-direction:column;align-items:center;gap:0;flex-shrink:0;}
+.tl-dot{width:30px;height:30px;border-radius:50%;display:flex;align-items:center;
+  justify-content:center;font-size:.75rem;flex-shrink:0;}
+.tl-dot.done{background:var(--blue);color:white;}
+.tl-dot.current{background:var(--blue-md);color:var(--blue);border:2px solid var(--blue);}
+.tl-dot.todo{background:var(--bg);color:var(--muted);border:2px solid var(--border);}
+.tl-line{width:2px;flex:1;background:var(--border);margin:3px 0;}
+.tl-line.done{background:var(--blue);}
+.tl-content{padding-top:4px;}
+.tl-title{font-size:.88rem;font-weight:800;color:var(--text);}
+.tl-title.todo{color:var(--muted);}
+.tl-sub{font-size:.75rem;color:var(--muted);margin-top:2px;}
+
+/* ── MODAL ── */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);display:none;
+  align-items:center;justify-content:center;z-index:300;padding:1.25rem;}
+.modal-overlay.show{display:flex;}
+.modal{background:var(--white);border-radius:22px;padding:1.75rem;max-width:400px;
+  width:100%;box-shadow:0 20px 60px rgba(0,0,0,.25);animation:slideUp .3s ease;}
+.modal-icon{width:52px;height:52px;border-radius:14px;display:flex;align-items:center;
+  justify-content:center;font-size:1.4rem;margin-bottom:1rem;}
+.modal-icon.danger{background:var(--red-lt);color:var(--red);}
+.modal-icon.success{background:var(--green-lt);color:var(--green);}
+.modal-title{font-size:1.15rem;font-weight:800;margin-bottom:.6rem;}
+.modal-text{font-size:.9rem;color:var(--muted);line-height:1.55;margin-bottom:1.5rem;}
+.modal-btns{display:grid;grid-template-columns:1fr 1fr;gap:.75rem;}
+.mbtn{padding:12px;border-radius:12px;border:none;font-weight:800;font-size:.875rem;cursor:pointer;transition:all .2s;}
+.mbtn-grey{background:var(--bg);color:var(--muted);border:1.5px solid var(--border);}
+.mbtn-grey:hover{background:var(--border);}
+.mbtn-red{background:var(--red);color:white;}
+.mbtn-red:hover{background:#b91c1c;}
+.mbtn-blue{background:var(--blue);color:white;}
+.mbtn-blue:hover{background:var(--blue-dk);}
+
+/* ── LOADER ── */
+.loader-overlay{position:fixed;inset:0;background:var(--bg);z-index:200;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;}
+.loader-spinner{width:48px;height:48px;border:5px solid var(--blue-md);
+  border-top-color:var(--blue);border-radius:50%;animation:spin .8s linear infinite;margin-bottom:1rem;}
+
+/* ── TOAST ── */
+.toast{position:fixed;bottom:1.5rem;left:50%;transform:translateX(-50%) translateY(100px);
+  background:#0f172a;color:white;padding:.7rem 1.25rem;border-radius:50px;
+  font-size:.83rem;font-weight:700;display:flex;align-items:center;gap:.5rem;
+  z-index:999;transition:all .35s;white-space:nowrap;box-shadow:0 8px 24px rgba(0,0,0,.2);}
+.toast.show{transform:translateX(-50%) translateY(0);}
+.toast.success i{color:#4ade80;}
+.toast.error   i{color:#f87171;}
+
+@media(max-width:600px){
+  .command-btns.two{grid-template-columns:1fr;}
+  .modal-btns{grid-template-columns:1fr;}
+}
+</style>
+</head>
+<body>
+
+<!-- LOADER -->
+<div id="loaderOverlay" class="loader-overlay">
+  <div class="loader-spinner"></div>
+  <div style="font-weight:800;color:var(--blue);font-size:1rem;">Loading Order...</div>
+</div>
+
+<!-- TOPBAR -->
+<div class="topbar">
+  <a href="admin-orders.html" class="back-btn"><i class="fas fa-chevron-left"></i></a>
+  <div class="topbar-title">Order Details</div>
+  <div class="topbar-actions">
+    <div class="topbar-icon-btn" onclick="printOrder()" title="Print"><i class="fas fa-print"></i></div>
+    <div class="topbar-icon-btn" onclick="refreshOrder()" title="Refresh" id="refreshBtn"><i class="fas fa-sync-alt"></i></div>
+  </div>
+</div>
+
+<!-- MAIN CONTENT -->
+<div class="container" id="mainContent" style="display:none;">
+
+  <!-- STATUS HERO -->
+  <div class="status-hero" id="statusHero">
+    <div class="status-hero-left">
+      <div class="status-icon" id="statusIcon"></div>
+      <div>
+        <div class="status-label">Order Status</div>
+        <div class="status-text" id="statusText"></div>
+      </div>
+    </div>
+    <div class="order-number-badge" id="orderNumberBadge"></div>
+  </div>
+
+  <!-- COMMAND BAR -->
+  <div class="command-bar" id="commandBar" style="display:none;">
+    <div class="command-bar-label">⚡ Actions</div>
+    <div class="command-btns" id="commandBtns"></div>
+  </div>
+
+  <!-- CUSTOMER INFO CARD -->
+  <div class="card">
+    <div class="card-head">
+      <div class="card-title"><i class="fas fa-user"></i> Customer Information</div>
+    </div>
+    <div class="info-rows" id="customerRows"></div>
+  </div>
+
+  <!-- DELIVERY ADDRESS CARD -->
+  <div class="card">
+    <div class="card-head">
+      <div class="card-title"><i class="fas fa-location-dot"></i> Delivery Address</div>
+    </div>
+    <div class="info-rows" id="deliveryRows"></div>
+  </div>
+
+  <!-- LOGISTICS CARD -->
+  <div class="card">
+    <div class="card-head">
+      <div class="card-title"><i class="fas fa-truck-fast"></i> Logistics & Shipping</div>
+    </div>
+
+    <!-- Courier Name Pill -->
+    <div id="courierPill"></div>
+
+    <!-- Logistics Grid: courier name, service code, delivery fee, ETA -->
+    <div class="logistics-grid" id="logisticsGrid"></div>
+
+    <!-- Tracking Box (shown after booking) -->
+    <div id="trackingBox" style="display:none;"></div>
+
+    <!-- Waybill Label Link (shown after booking) -->
+    <div id="labelLinkWrap"></div>
+  </div>
+
+  <!-- PAYMENT CARD -->
+  <div class="card">
+    <div class="card-head">
+      <div class="card-title"><i class="fas fa-credit-card"></i> Payment</div>
+    </div>
+    <div id="paymentSection"></div>
+  </div>
+
+  <!-- ORDER ITEMS CARD -->
+  <div class="card">
+    <div class="card-head">
+      <div class="card-title"><i class="fas fa-box-open"></i> Items Ordered</div>
+      <div style="font-size:.78rem;font-weight:700;color:var(--muted);" id="itemCountLabel"></div>
+    </div>
+    <div class="item-list" id="itemList"></div>
+  </div>
+
+  <!-- FINANCIALS CARD -->
+  <div class="card">
+    <div class="card-head">
+      <div class="card-title"><i class="fas fa-receipt"></i> Order Summary</div>
+    </div>
+    <div class="fin-rows" id="finRows"></div>
+  </div>
+
+  <!-- ORDER TIMELINE CARD -->
+  <div class="card">
+    <div class="card-head">
+      <div class="card-title"><i class="fas fa-timeline"></i> Order Timeline</div>
+    </div>
+    <div class="timeline" id="timeline"></div>
+  </div>
+
+  <!-- ORDER META CARD -->
+  <div class="card">
+    <div class="card-head">
+      <div class="card-title"><i class="fas fa-circle-info"></i> Technical Details</div>
+    </div>
+    <div class="info-rows" id="metaRows"></div>
+  </div>
+
+</div><!-- end .container -->
+
+<!-- CANCEL CONFIRM MODAL -->
+<div class="modal-overlay" id="cancelModal">
+  <div class="modal">
+    <div class="modal-icon danger"><i class="fas fa-triangle-exclamation"></i></div>
+    <div class="modal-title">Cancel this order?</div>
+    <div class="modal-text">This cannot be undone. The order will be permanently marked as cancelled and the customer will be notified.</div>
+    <div class="modal-btns">
+      <button class="mbtn mbtn-grey" onclick="closeModal('cancelModal')">Keep Order</button>
+      <button class="mbtn mbtn-red" onclick="confirmCancel()">Yes, Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- DELIVER CONFIRM MODAL -->
+<div class="modal-overlay" id="deliverModal">
+  <div class="modal">
+    <div class="modal-icon success"><i class="fas fa-check-circle"></i></div>
+    <div class="modal-title">Mark as Delivered?</div>
+    <div class="modal-text">Confirm that this order has been successfully delivered to the customer.</div>
+    <div class="modal-btns">
+      <button class="mbtn mbtn-grey" onclick="closeModal('deliverModal')">Not Yet</button>
+      <button class="mbtn mbtn-blue" onclick="confirmDeliver()">Yes, Delivered</button>
+    </div>
+  </div>
+</div>
+
+<!-- SOUND -->
+<audio id="dingSound" src="https://assets.mixkit.co/active_storage/sfx/2568/2568-preview.mp3" preload="auto"></audio>
+
+<!-- TOAST -->
+<div class="toast" id="toast"><i></i><span id="toastMsg"></span></div>
+
+<script>
+// ── CONFIG ──
+const SB_URL  = "https://kswikkoqfpyxuurzxail.supabase.co";
+const SB_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imtzd2lra29xZnB5eHV1cnp4YWlsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEzNjEzMDQsImV4cCI6MjA4NjkzNzMwNH0.uuoSKWOTeXot1HJys0EO9OcIRBL0mKrNHIUHIAPCpZ4";
+const db = supabase.createClient(SB_URL, SB_ANON);
+
+const orderId = new URLSearchParams(window.location.search).get('id');
+let currentOrder = null;
+
+// ── HELPERS ──
+function fmt(n)  { return '₦' + Number(n || 0).toLocaleString('en-NG'); }
+function esc(s)  {
+  if (s === null || s === undefined || s === '') return '<span style="color:var(--muted);font-weight:600">—</span>';
+  const d = document.createElement('div'); d.textContent = s; return d.innerHTML;
+}
+function fmtDate(iso) {
+  if (!iso) return '—';
+  return new Date(iso).toLocaleString('en-NG', {
+    day:'numeric', month:'long', year:'numeric',
+    hour:'2-digit', minute:'2-digit'
+  });
+}
+function fmtDateShort(iso) {
+  if (!iso) return '—';
+  return new Date(iso).toLocaleString('en-NG', { day:'numeric', month:'short', year:'numeric' });
+}
+function showToast(msg, type = 'success') {
+  const t = document.getElementById('toast');
+  t.className = `toast ${type}`;
+  t.querySelector('i').className = type === 'success' ? 'fas fa-check-circle' : 'fas fa-circle-exclamation';
+  document.getElementById('toastMsg').textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 3500);
+}
+function openModal(id)  { document.getElementById(id).classList.add('show'); }
+function closeModal(id) { document.getElementById(id).classList.remove('show'); }
+function playDing() { document.getElementById('dingSound').play().catch(() => {}); }
+
+function infoRow(icon, label, value, extra = '') {
+  return `
+    <div class="info-row">
+      <div class="info-icon-wrap"><i class="${icon}"></i></div>
+      <div>
+        <div class="info-label">${label}</div>
+        <div class="info-value ${extra}">${value}</div>
+      </div>
+    </div>`;
+}
+
+// ── INIT ──
+async function init() {
+  if (!orderId) { window.location.href = 'admin-orders.html'; return; }
+  try {
+    const { data, error } = await db.from('orders').select('*').eq('id', orderId).single();
+    if (error) throw error;
+    currentOrder = data;
+    renderAll();
+  } catch (err) {
+    alert('Could not load order: ' + err.message);
+  } finally {
+    document.getElementById('loaderOverlay').style.display = 'none';
+    document.getElementById('mainContent').style.display   = 'block';
+  }
+}
+
+// ── RENDER ALL ──
+function renderAll() {
+  renderStatusHero();
+  renderCommandBar();
+  renderCustomer();
+  renderDelivery();
+  renderLogistics();
+  renderPayment();
+  renderItems();
+  renderFinancials();
+  renderTimeline();
+  renderMeta();
+}
+
+// ── STATUS HERO ──
+const STATUS_META = {
+  pending:    { icon:'fas fa-clock',        text:'Pending Approval',      cls:'pending'    },
+  processing: { icon:'fas fa-cog',          text:'Processing',            cls:'processing' },
+  shipped:    { icon:'fas fa-truck-fast',   text:'Out for Delivery',      cls:'shipped'    },
+  delivered:  { icon:'fas fa-circle-check', text:'Delivered',             cls:'delivered'  },
+  cancelled:  { icon:'fas fa-ban',          text:'Cancelled',             cls:'cancelled'  },
+};
+function renderStatusHero() {
+  const o = currentOrder;
+  const s = o.status || 'pending';
+  const m = STATUS_META[s] || STATUS_META.pending;
+  const hero  = document.getElementById('statusHero');
+  hero.className = `status-hero ${m.cls}`;
+  document.getElementById('statusIcon').innerHTML = `<i class="${m.icon}"></i>`;
+  document.getElementById('statusText').textContent = m.text;
+  document.getElementById('orderNumberBadge').textContent = o.order_number || `#${o.id}`;
+}
+
+// ── COMMAND BAR ──
+function renderCommandBar() {
+  const o = currentOrder;
+  const s = o.status || 'pending';
+  const bar  = document.getElementById('commandBar');
+  const btns = document.getElementById('commandBtns');
+
+  if (s === 'cancelled' || s === 'delivered') { bar.style.display = 'none'; return; }
+
+  bar.style.display = 'block';
+  let html = '';
+  if (s === 'pending') {
+    btns.className = 'command-btns two';
+    html = `
+      <button class="btn btn-approve" id="btnApprove" onclick="approveOrder()">
+        <i class="fas fa-check-circle"></i> Approve Order
+      </button>
+      <button class="btn btn-cancel" id="btnCancelCmd" onclick="openModal('cancelModal')">
+        <i class="fas fa-times-circle"></i> Cancel Order
+      </button>`;
+  } else if (s === 'processing') {
+    btns.className = 'command-btns one';
+    html = `
+      <button class="btn btn-book" id="btnBook" onclick="bookShipment()">
+        <i class="fas fa-rocket"></i> Confirm & Book Shipment
+      </button>`;
+  } else if (s === 'shipped') {
+    btns.className = 'command-btns one';
+    html = `
+      <button class="btn btn-delivered" id="btnDeliver" onclick="openModal('deliverModal')">
+        <i class="fas fa-circle-check"></i> Mark as Delivered
+      </button>`;
+  }
+  btns.innerHTML = html;
+}
+
+// ── CUSTOMER ──
+function renderCustomer() {
+  const o = currentOrder;
+  document.getElementById('customerRows').innerHTML =
+    infoRow('fas fa-user',        'Full Name',     esc(o.customer_name))  +
+    infoRow('fas fa-phone',       'Phone Number',  esc(o.customer_phone)) +
+    infoRow('fas fa-envelope',    'Email Address', esc(o.customer_email)) +
+    infoRow('fas fa-fingerprint', 'Customer UID',  `<span style="font-family:monospace;font-size:.78rem">${esc(o.uid)}</span>`);
+}
+
+// ── DELIVERY ADDRESS ──
+function renderDelivery() {
+  const o = currentOrder;
+  const fullAddr = [o.delivery_street, o.delivery_city, o.delivery_state]
+    .filter(x => x && x.trim()).join(', ');
+  document.getElementById('deliveryRows').innerHTML =
+    infoRow('fas fa-house',           'Street Address', esc(o.delivery_street)) +
+    infoRow('fas fa-city',            'City',           esc(o.delivery_city))   +
+    infoRow('fas fa-map',             'State',          esc(o.delivery_state))  +
+    (o.delivery_landmark ? infoRow('fas fa-map-pin', 'Landmark', esc(o.delivery_landmark)) : '') +
+    infoRow('fas fa-location-dot',    'Full Address',   fullAddr ? esc(fullAddr) : '<span style="color:var(--muted)">—</span>');
+}
+
+// ── LOGISTICS ──
+function renderLogistics() {
+  const o = currentOrder;
+  const hasCourier = o.shipbubble_courier_name && o.shipbubble_courier_name.trim();
+
+  // Courier pill
+  let pillHTML = '';
+  if (hasCourier) {
+    pillHTML = `<div class="courier-pill exists"><i class="fas fa-truck"></i> ${esc(o.shipbubble_courier_name)}</div>`;
+  } else if (o.status === 'shipped' || o.status === 'delivered') {
+    pillHTML = `<div class="courier-pill none"><i class="fas fa-circle-exclamation"></i> Courier info not saved</div>`;
+  } else {
+    pillHTML = `<div class="courier-pill missing"><i class="fas fa-hourglass-half"></i> Awaiting shipment booking</div>`;
+  }
+  document.getElementById('courierPill').innerHTML = pillHTML;
+
+  // Logistics grid
+  document.getElementById('logisticsGrid').innerHTML = `
+    <div class="logistics-box highlight">
+      <div class="lbl"><i class="fas fa-truck"></i> Courier Name</div>
+      <div class="val">${hasCourier ? esc(o.shipbubble_courier_name) : '—'}</div>
+    </div>
+    <div class="logistics-box">
+      <div class="lbl"><i class="fas fa-barcode"></i> Courier ID</div>
+      <div class="val" style="font-family:monospace;font-size:.8rem">${esc(o.shipbubble_courier_id) || '—'}</div>
+    </div>
+    <div class="logistics-box">
+      <div class="lbl"><i class="fas fa-code"></i> Service Code</div>
+      <div class="val" style="font-family:monospace;font-size:.8rem">${esc(o.shipbubble_service_code) || '—'}</div>
+    </div>
+    <div class="logistics-box highlight">
+      <div class="lbl"><i class="fas fa-naira-sign"></i> Delivery Fee</div>
+      <div class="val">${o.delivery_fee > 0 ? fmt(o.delivery_fee) : '—'}</div>
+    </div>
+    <div class="logistics-box" style="grid-column:1/-1">
+      <div class="lbl"><i class="fas fa-key"></i> Shipbubble Request Token</div>
+      <div class="val" style="font-family:monospace;font-size:.72rem;word-break:break-all;white-space:normal">
+        ${esc(o.shipbubble_request_token) || '<span style="color:var(--muted);font-size:.8rem">Not available — will auto-fetch on booking</span>'}
+      </div>
+    </div>`;
+
+  // Tracking box
+  const tid = o.tracking_id || o.shipbubble_tracking_id || '';
+  if (tid) {
+    document.getElementById('trackingBox').style.display = 'block';
+    document.getElementById('trackingBox').innerHTML = `
+      <div class="tracking-box" style="margin-top:.85rem">
+        <div class="tracking-left">
+          <i class="fas fa-satellite-dish"></i>
+          <div>
+            <div class="tracking-label">Live Tracking ID</div>
+            <div class="tracking-id" id="trackingIdText">${esc(tid)}</div>
+          </div>
+        </div>
+        <button class="copy-btn" onclick="copyTracking()">
+          <i class="fas fa-copy"></i> Copy
+        </button>
+      </div>`;
+  }
+
+  // Label / waybill link
+  const labelUrl = o.label_url || '';
+  if (labelUrl) {
+    document.getElementById('labelLinkWrap').innerHTML = `
+      <a href="${esc(labelUrl)}" target="_blank" class="label-link" style="margin-top:.85rem">
+        <i class="fas fa-file-pdf"></i> View Shipping Label / Waybill
+        <i class="fas fa-external-link" style="font-size:.7rem"></i>
+      </a>`;
+  }
+}
+
+// ── PAYMENT ──
+function renderPayment() {
+  const o = currentOrder;
+  const method   = o.payment_method || 'paystack';
+  const pStatus  = o.payment_status || 'pending';
+  const isCOD    = method === 'cash_on_delivery';
+  const isPaid   = pStatus === 'paid';
+
+  let badgeHTML = '';
+  if (isCOD) {
+    badgeHTML = `<span class="pay-badge pay-cod"><i class="fas fa-money-bill-wave"></i> Cash on Delivery</span>`;
+  } else if (isPaid) {
+    badgeHTML = `<span class="pay-badge pay-paid"><i class="fas fa-check-circle"></i> Paid Online</span>`;
+  } else {
+    badgeHTML = `<span class="pay-badge pay-pending"><i class="fas fa-clock"></i> Payment Pending</span>`;
+  }
+
+  document.getElementById('paymentSection').innerHTML = `
+    <div style="margin-bottom:.85rem">${badgeHTML}</div>
+    ${infoRow('fas fa-credit-card',    'Payment Method',    esc(isCOD ? 'Cash on Delivery' : 'Online (Paystack)'))}
+    ${infoRow('fas fa-circle-check',   'Payment Status',    esc(isPaid ? 'Paid ✅' : isCOD ? 'Collect on delivery' : 'Pending'))}
+    ${o.payment_ref ? infoRow('fas fa-hashtag', 'Payment Reference', `<span style="font-family:monospace;font-size:.82rem">${esc(o.payment_ref)}</span>`) : ''}`;
+}
+
+// ── ITEMS ──
+function renderItems() {
+  const o = currentOrder;
+  let items = [];
+  try { items = typeof o.items === 'string' ? JSON.parse(o.items) : (o.items || []); } catch { items = []; }
+
+  const totalItems = items.reduce((s, i) => s + (i.quantity || 1), 0);
+  document.getElementById('itemCountLabel').textContent = `${totalItems} item${totalItems !== 1 ? 's' : ''}`;
+
+  if (!items.length) {
+    document.getElementById('itemList').innerHTML = `<p style="color:var(--muted);font-size:.88rem">No item details found.</p>`;
+    return;
+  }
+
+  document.getElementById('itemList').innerHTML = items.map(it => {
+    const img = it.image_url || it.image || '';
+    const qty = it.quantity || 1;
+    const price = it.price || it.unit_price || 0;
+    const lineTotal = price * qty;
+    return `
+    <div class="order-item">
+      ${img
+        ? `<img class="item-img" src="${esc(img)}" alt="" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">`
+        : ''}
+      <div class="item-img-ph" style="${img ? 'display:none' : ''}"><i class="fas fa-box"></i></div>
+      <div style="flex:1;min-width:0">
+        <div class="item-name">${esc(it.name || it.title || 'Product')}</div>
+        <div class="item-meta">
+          Qty: ${qty} &nbsp;×&nbsp; ${fmt(price)}
+          ${it.product_id || it.id ? `<span style="margin-left:.5rem;font-family:monospace;font-size:.68rem;color:var(--muted)">ID: ${it.product_id || it.id}</span>` : ''}
+        </div>
+      </div>
+      <div class="item-total">${fmt(lineTotal)}</div>
+    </div>`;
+  }).join('');
+}
+
+// ── FINANCIALS ──
+function renderFinancials() {
+  const o = currentOrder;
+  const subtotal  = Number(o.subtotal  || 0);
+  const delivery  = Number(o.delivery_fee || 0);
+  const discount  = Number(o.discount  || 0);
+  const total     = Number(o.total     || 0);
+
+  document.getElementById('finRows').innerHTML = `
+    <div class="fin-row"><span class="label">Subtotal</span><span class="value">${fmt(subtotal)}</span></div>
+    <div class="fin-row"><span class="label"><i class="fas fa-truck" style="font-size:.75rem"></i> Delivery Fee${currentOrder.shipbubble_courier_name ? ` (${esc(currentOrder.shipbubble_courier_name)})` : ''}</span><span class="value">${delivery > 0 ? fmt(delivery) : '₦0'}</span></div>
+    ${discount > 0 ? `<div class="fin-row discount"><span class="label"><i class="fas fa-tag" style="font-size:.75rem"></i> Discount / Coupon</span><span class="value">-${fmt(discount)}</span></div>` : ''}
+    <div class="fin-row total"><span class="label">Total Payable</span><span class="value">${fmt(total)}</span></div>`;
+}
+
+// ── TIMELINE ──
+function renderTimeline() {
+  const o = currentOrder;
+  const s = o.status || 'pending';
+  const steps = [
+    { key:'pending',    icon:'fas fa-clock',         label:'Order Placed',    sub: fmtDateShort(o.created_at) },
+    { key:'processing', icon:'fas fa-cog',            label:'Order Approved',  sub: 'Admin approved the order' },
+    { key:'shipped',    icon:'fas fa-truck-fast',     label:'Shipment Booked', sub: o.tracking_id ? `Tracking: ${o.tracking_id}` : 'Awaiting booking' },
+    { key:'delivered',  icon:'fas fa-circle-check',  label:'Delivered',       sub: 'Customer received order' },
+  ];
+  const order = ['pending','processing','shipped','delivered'];
+  const curIdx = order.indexOf(s === 'cancelled' ? 'pending' : s);
+
+  document.getElementById('timeline').innerHTML = steps.map((step, i) => {
+    let dotCls = 'todo';
+    if (s === 'cancelled' && i === 0) dotCls = 'done';
+    else if (i < curIdx) dotCls = 'done';
+    else if (i === curIdx) dotCls = 'current';
+    const isLast = i === steps.length - 1;
+    const lineCls = i < curIdx ? 'done' : '';
+    return `
+    <div class="tl-item">
+      <div class="tl-dot-wrap">
+        <div class="tl-dot ${dotCls}"><i class="${step.icon}" style="font-size:.65rem"></i></div>
+        ${!isLast ? `<div class="tl-line ${lineCls}"></div>` : ''}
+      </div>
+      <div class="tl-content">
+        <div class="tl-title ${dotCls === 'todo' ? 'todo' : ''}">${step.label}${s === 'cancelled' && i === 0 ? ' → <span style="color:var(--red)">Cancelled</span>' : ''}</div>
+        <div class="tl-sub">${step.sub}</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ── META ──
+function renderMeta() {
+  const o = currentOrder;
+  document.getElementById('metaRows').innerHTML =
+    infoRow('fas fa-hashtag',     'Order ID (Database)',  `<span style="font-family:monospace">${esc(String(o.id))}</span>`) +
+    infoRow('fas fa-barcode',     'Order Number',         `<span style="font-family:monospace">${esc(o.order_number)}</span>`) +
+    infoRow('fas fa-calendar',    'Created At',           esc(fmtDate(o.created_at))) +
+    infoRow('fas fa-pen-to-square','Last Updated',        esc(fmtDate(o.updated_at)));
+}
+
+// ── APPROVE ──
+async function approveOrder() {
+  const btn = document.getElementById('btnApprove');
+  if (!btn) return;
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Approving...';
+  try {
+    const { error } = await db.from('orders').update({ status:'processing', updated_at: new Date().toISOString() }).eq('id', orderId);
+    if (error) throw error;
+    currentOrder.status = 'processing';
+    playDing();
+    renderAll();
+    showToast('✅ Order approved and moved to processing!', 'success');
+  } catch(e) {
+    showToast('❌ ' + e.message, 'error');
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fas fa-check-circle"></i> Approve Order';
+  }
+}
+
+// ── CANCEL ──
+async function confirmCancel() {
+  closeModal('cancelModal');
+  try {
+    const { error } = await db.from('orders').update({ status:'cancelled', updated_at: new Date().toISOString() }).eq('id', orderId);
+    if (error) throw error;
+    currentOrder.status = 'cancelled';
+    renderAll();
+    showToast('Order has been cancelled.', 'error');
+  } catch(e) {
+    showToast('❌ ' + e.message, 'error');
+  }
+}
+
+// ── BOOK SHIPMENT ──
+async function bookShipment() {
+  const btn = document.getElementById('btnBook');
+  if (!btn) return;
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Booking with Shipbubble...';
+
+  let trackingId = '', courierName = '', labelUrl = '', shipbubbleOk = false;
+
+  try {
+    const res = await fetch('/api/shipping', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'bookShipment', payload: { order: currentOrder } })
+    });
+    const data = await res.json();
+    if (data.ok) {
+      trackingId   = data.tracking_id  || '';
+      courierName  = data.courier_name || currentOrder.shipbubble_courier_name || '';
+      labelUrl     = data.label_url    || '';
+      shipbubbleOk = true;
+    } else {
+      console.warn('[order-details] Shipbubble error:', data.error);
+    }
+  } catch(e) {
+    console.warn('[order-details] Shipbubble unreachable:', e.message);
+  }
+
+  // Update Supabase regardless
+  const patch = { status: 'shipped', updated_at: new Date().toISOString() };
+  if (trackingId)  patch.tracking_id             = trackingId;
+  if (courierName) patch.shipbubble_courier_name  = courierName;
+  if (labelUrl)    patch.label_url               = labelUrl;
+
+  try {
+    const { error } = await db.from('orders').update(patch).eq('id', orderId);
+    if (error) throw error;
+
+    Object.assign(currentOrder, patch);
+    playDing();
+    renderAll();
+
+    if (shipbubbleOk && trackingId) {
+      showToast(`✅ Shipment booked! Tracking: ${trackingId}`, 'success');
+    } else {
+      showToast('✅ Order marked as shipped. Shipbubble booking failed — book manually.', 'error');
+    }
+  } catch(e) {
+    showToast('❌ Could not update order: ' + e.message, 'error');
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fas fa-rocket"></i> Confirm & Book Shipment';
+  }
+}
+
+// ── MARK DELIVERED ──
+async function confirmDeliver() {
+  closeModal('deliverModal');
+  try {
+    const { error } = await db.from('orders').update({ status:'delivered', updated_at: new Date().toISOString() }).eq('id', orderId);
+    if (error) throw error;
+    currentOrder.status = 'delivered';
+    // Trigger referral reward if applicable
+    fetch('/api/referral', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ action:'rewardReferrer', orderUid: currentOrder.uid, orderId: String(currentOrder.id) })
+    }).catch(()=>{});
+    playDing();
+    renderAll();
+    showToast('✅ Order marked as delivered!', 'success');
+  } catch(e) {
+    showToast('❌ ' + e.message, 'error');
+  }
+}
+
+// ── COPY TRACKING ──
+function copyTracking() {
+  const tid = document.getElementById('trackingIdText')?.textContent || '';
+  navigator.clipboard.writeText(tid).then(() => {
+    showToast('Tracking ID copied!', 'success');
+  }).catch(() => {
+    showToast('Could not copy — try manually', 'error');
+  });
+}
+
+// ── REFRESH ──
+async function refreshOrder() {
+  const btn = document.getElementById('refreshBtn');
+  btn.querySelector('i').style.animation = 'spin .6s linear infinite';
+  try {
+    const { data, error } = await db.from('orders').select('*').eq('id', orderId).single();
+    if (error) throw error;
+    currentOrder = data;
+    renderAll();
+    showToast('Order refreshed', 'success');
+  } catch(e) {
+    showToast('Could not refresh: ' + e.message, 'error');
+  }
+  btn.querySelector('i').style.animation = '';
+}
+
+// ── PRINT ──
+function printOrder() {
+  window.print();
+}
+
+// ── REAL-TIME UPDATES ──
+db.channel(`order_${orderId}`)
+  .on('postgres_changes', { event:'UPDATE', schema:'public', table:'orders', filter:`id=eq.${orderId}` }, payload => {
+    currentOrder = payload.new;
+    renderAll();
+    showToast('Order updated in real time', 'success');
+  })
+  .subscribe();
+
+init();
+</script>
+</body>
+</html>
