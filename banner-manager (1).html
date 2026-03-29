@@ -1,0 +1,545 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
+<title>Banner Manager — MC Store Admin</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+:root{
+  --blue:#1a56db;--blue-dk:#1347c8;--blue-lt:#eff6ff;--blue-md:#dbeafe;
+  --white:#fff;--bg:#f0f7ff;--text:#0f172a;--muted:#64748b;--border:#e2e8f0;
+  --green:#16a34a;--green-lt:#dcfce7;--red:#dc2626;--red-lt:#fef2f2;
+  --gold:#f59e0b;--gold-lt:#fefce8;
+}
+html,body{background:var(--bg);font-family:'DM Sans',sans-serif;color:var(--text);min-height:100vh;}
+@keyframes spin{to{transform:rotate(360deg);}}
+@keyframes fadeUp{from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:none;}}
+
+/* ── VIEWS ── */
+/* View A = list of existing banners */
+/* View B = add new banner form */
+#viewList{display:block;}
+#viewAdd {display:none;}
+
+/* ── TOPBAR ── */
+.topbar{position:sticky;top:0;z-index:50;background:var(--white);border-bottom:1.5px solid var(--border);padding:0 1rem;height:52px;display:flex;align-items:center;gap:.75rem;box-shadow:0 2px 8px rgba(26,86,219,.07);}
+.back-btn{width:34px;height:34px;border-radius:10px;background:var(--bg);border:1.5px solid var(--border);display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--muted);flex-shrink:0;}
+.topbar-title{font-weight:800;font-size:.95rem;flex:1;}
+.topbar-title span{color:var(--blue);}
+.add-btn{padding:0 1rem;height:34px;border-radius:10px;background:var(--blue);color:white;border:none;font-family:'DM Sans',sans-serif;font-size:.82rem;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:5px;white-space:nowrap;}
+.add-btn:disabled{opacity:.5;pointer-events:none;}
+
+/* ── LIMIT BAR ── */
+.limit-bar{margin:.85rem 1rem .4rem;background:var(--white);border:1.5px solid var(--border);border-radius:12px;padding:.65rem 1rem;display:flex;align-items:center;gap:.75rem;}
+.limit-dots{display:flex;gap:5px;}
+.ldot{width:22px;height:22px;border-radius:6px;background:var(--bg);border:1.5px solid var(--border);transition:all .2s;}
+.ldot.used{background:var(--blue);border-color:var(--blue);}
+.limit-txt{font-size:.78rem;font-weight:700;color:var(--muted);flex:1;}
+.limit-txt span{color:var(--blue);}
+
+/* ── BANNER LIST ── */
+.banner-cards{padding:0 1rem 5rem;display:flex;flex-direction:column;gap:.7rem;margin-top:.5rem;}
+.bcard{background:var(--white);border:1.5px solid var(--border);border-radius:14px;overflow:hidden;animation:fadeUp .25s ease both;}
+.bcard-top{height:100px;position:relative;display:flex;align-items:flex-end;padding:.6rem .75rem;}
+.bcard-top img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;}
+.bcard-overlay{position:absolute;inset:0;background:linear-gradient(to top,rgba(0,0,0,.55) 0%,transparent 60%);}
+.bcard-gradient{position:absolute;inset:0;}
+.bcard-label{position:relative;z-index:2;color:white;}
+.bcard-tag{font-size:.65rem;font-weight:700;opacity:.85;text-transform:uppercase;letter-spacing:.05em;}
+.bcard-title{font-size:.88rem;font-weight:800;line-height:1.2;margin-top:2px;}
+.bcard-body{padding:.6rem .85rem;display:flex;align-items:center;gap:.5rem;}
+.bcard-prods{flex:1;font-size:.72rem;color:var(--muted);}
+.bcard-prods strong{color:var(--text);}
+.bcard-acts{display:flex;gap:.35rem;}
+.bact{width:30px;height:30px;border-radius:8px;border:1.5px solid var(--border);background:var(--bg);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:.75rem;transition:all .15s;}
+.bact.on {background:var(--green-lt);border-color:#bbf7d0;color:var(--green);}
+.bact.off{background:var(--gold-lt);border-color:#fde68a;color:var(--gold);}
+.bact.del{background:var(--red-lt);border-color:#fecaca;color:var(--red);}
+
+.empty-state{text-align:center;padding:4rem 2rem;color:var(--muted);}
+.empty-state i{font-size:3rem;opacity:.2;display:block;margin-bottom:1rem;}
+.empty-state h3{font-size:.95rem;font-weight:700;color:var(--text);margin-bottom:.3rem;}
+.empty-state p{font-size:.8rem;}
+
+/* ── ADD FORM VIEW ── */
+.form-page{padding:.85rem 1rem 5rem;}
+
+.form-section{background:var(--white);border:1.5px solid var(--border);border-radius:14px;margin-bottom:.85rem;overflow:hidden;}
+.form-section-head{padding:.7rem 1rem;border-bottom:1px solid var(--border);font-size:.78rem;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;display:flex;align-items:center;gap:.5rem;}
+.form-section-body{padding:.85rem 1rem;}
+
+.form-label{font-size:.7rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px;display:block;}
+.form-input{width:100%;padding:.62rem .85rem;background:var(--bg);border:1.5px solid var(--border);border-radius:10px;font-family:'DM Sans',sans-serif;font-size:.88rem;color:var(--text);outline:none;margin-bottom:.65rem;transition:border-color .2s;}
+.form-input:focus{border-color:var(--blue);background:white;}
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:.5rem;}
+
+/* Image upload */
+.img-drop{width:100%;height:90px;border:2px dashed var(--border);border-radius:10px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;cursor:pointer;background:var(--bg);position:relative;overflow:hidden;margin-bottom:.65rem;transition:border-color .2s;}
+.img-drop:hover{border-color:var(--blue);}
+.img-drop input{position:absolute;inset:0;opacity:0;cursor:pointer;z-index:2;}
+.img-drop img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:8px;}
+.img-drop-txt{font-size:.75rem;color:var(--muted);font-weight:600;position:relative;z-index:1;}
+.img-drop i{font-size:1.4rem;color:var(--muted);position:relative;z-index:1;}
+.img-drop.has-img .img-drop-txt,.img-drop.has-img i{display:none;}
+
+/* Gradient picker */
+.grad-row{display:flex;align-items:center;gap:.6rem;margin-bottom:.65rem;}
+.grad-preview{flex:1;height:36px;border-radius:8px;transition:background .2s;}
+.color-pick{width:36px;height:36px;border-radius:8px;border:1.5px solid var(--border);cursor:pointer;padding:2px;}
+
+/* Product picker */
+.prod-search-wrap{position:relative;margin-bottom:.6rem;}
+.prod-search-wrap i{position:absolute;left:.75rem;top:50%;transform:translateY(-50%);color:var(--muted);font-size:.82rem;pointer-events:none;}
+.prod-search-input{width:100%;padding:.6rem .85rem .6rem 2.2rem;background:var(--bg);border:1.5px solid var(--border);border-radius:10px;font-family:'DM Sans',sans-serif;font-size:.85rem;color:var(--text);outline:none;transition:border-color .2s;}
+.prod-search-input:focus{border-color:var(--blue);background:white;}
+
+.prod-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:.4rem;max-height:300px;overflow-y:auto;padding:.4rem;border:1.5px solid var(--border);border-radius:10px;background:var(--bg);}
+.prod-grid::-webkit-scrollbar{width:3px;}
+.prod-grid::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px;}
+
+.pcard{border:2px solid transparent;border-radius:10px;background:var(--white);cursor:pointer;transition:all .15s;position:relative;overflow:hidden;}
+.pcard:hover{border-color:var(--blue-md);}
+.pcard.sel{border-color:var(--blue);}
+.pcard.sel::after{content:'✓';position:absolute;top:4px;right:5px;width:16px;height:16px;background:var(--blue);border-radius:50%;font-size:.62rem;font-weight:900;color:white;display:flex;align-items:center;justify-content:center;line-height:16px;text-align:center;}
+.pcard-img{width:100%;aspect-ratio:1;object-fit:cover;display:block;background:var(--bg);}
+.pcard-placeholder{width:100%;aspect-ratio:1;background:var(--bg);display:flex;align-items:center;justify-content:center;color:var(--muted);}
+.pcard-name{font-size:.62rem;font-weight:700;padding:.3rem .35rem;line-height:1.2;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;}
+
+.sel-count{font-size:.75rem;font-weight:700;color:var(--blue);margin-top:.45rem;}
+.sel-chips{display:flex;flex-wrap:wrap;gap:.3rem;margin-top:.4rem;}
+.sel-chip{display:flex;align-items:center;gap:4px;padding:3px 8px 3px 3px;background:var(--blue-lt);border:1.5px solid var(--blue-md);border-radius:20px;font-size:.68rem;font-weight:700;color:var(--blue);}
+.sel-chip img{width:18px;height:18px;border-radius:4px;object-fit:cover;}
+.sel-chip-x{cursor:pointer;opacity:.6;}
+
+/* Save btn */
+.save-btn{width:100%;padding:.8rem;background:var(--blue);color:white;border:none;border-radius:12px;font-family:'DM Sans',sans-serif;font-size:.9rem;font-weight:800;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:7px;box-shadow:0 4px 16px rgba(26,86,219,.3);transition:all .15s;margin-top:.25rem;}
+.save-btn:active{transform:scale(.97);}
+.save-btn:disabled{opacity:.5;pointer-events:none;}
+
+/* ── LOADING / SPINNER ── */
+.spinner{width:28px;height:28px;border:3px solid var(--border);border-top-color:var(--blue);border-radius:50%;animation:spin .8s linear infinite;margin:2rem auto;}
+
+/* ── TOAST ── */
+.toast{position:fixed;bottom:1.5rem;left:50%;transform:translateX(-50%) translateY(80px);background:var(--white);border:1.5px solid var(--border);border-radius:12px;padding:.65rem 1.2rem;font-size:.83rem;font-weight:600;box-shadow:0 8px 28px rgba(0,0,0,.12);display:flex;align-items:center;gap:7px;z-index:999;transition:transform .3s cubic-bezier(.34,1.56,.64,1);white-space:nowrap;max-width:calc(100vw - 2rem);}
+.toast.show{transform:translateX(-50%) translateY(0);}
+.toast.success{border-color:#bbf7d0;color:var(--green);}
+.toast.error  {border-color:#fecaca;color:var(--red);}
+.toast.info   {border-color:var(--blue-md);color:var(--blue);}
+</style>
+</head>
+<body>
+
+<!-- ══════════════════ VIEW A: BANNER LIST ══════════════════ -->
+<div id="viewList">
+  <div class="topbar">
+    <div class="back-btn" id="backToDash"><i class="fas fa-arrow-left"></i></div>
+    <div class="topbar-title">Hero <span>Banners</span></div>
+    <button class="add-btn" id="openAddBtn"><i class="fas fa-plus"></i> Add Banner</button>
+  </div>
+
+  <!-- Slot indicators -->
+  <div class="limit-bar">
+    <div class="limit-dots" id="limitDots">
+      <div class="ldot"></div><div class="ldot"></div><div class="ldot"></div>
+      <div class="ldot"></div><div class="ldot"></div><div class="ldot"></div>
+    </div>
+    <div class="limit-txt"><span id="limitUsed">0</span>/6 banners used</div>
+  </div>
+
+  <div class="banner-cards" id="bannerCards">
+    <div class="spinner"></div>
+  </div>
+</div>
+
+<!-- ══════════════════ VIEW B: ADD FORM ══════════════════ -->
+<div id="viewAdd" style="display:none">
+  <div class="topbar">
+    <div class="back-btn" id="backToList"><i class="fas fa-arrow-left"></i></div>
+    <div class="topbar-title">New <span>Banner</span></div>
+  </div>
+
+  <div class="form-page">
+
+    <!-- Banner text -->
+    <div class="form-section">
+      <div class="form-section-head"><i class="fas fa-pen"></i> Banner Text</div>
+      <div class="form-section-body">
+        <label class="form-label">Title *</label>
+        <input class="form-input" id="bTitle" placeholder="e.g. Up to 50% Off Electronics">
+        <div class="form-row">
+          <div>
+            <label class="form-label">Subtitle</label>
+            <input class="form-input" id="bSub" placeholder="Limited time!">
+          </div>
+          <div>
+            <label class="form-label">Tag / Badge</label>
+            <input class="form-input" id="bTag" placeholder="🔥 Hot Deal">
+          </div>
+        </div>
+        <label class="form-label">Button Text</label>
+        <input class="form-input" id="bBtn" placeholder="Shop Now">
+      </div>
+    </div>
+
+    <!-- Background -->
+    <div class="form-section">
+      <div class="form-section-head"><i class="fas fa-palette"></i> Background</div>
+      <div class="form-section-body">
+        <label class="form-label">Upload Image (optional — overrides gradient)</label>
+        <div class="img-drop" id="imgDrop">
+          <input type="file" id="imgInput" accept="image/*">
+          <i class="fas fa-cloud-arrow-up"></i>
+          <span class="img-drop-txt">Tap to upload banner image</span>
+        </div>
+        <label class="form-label">Or choose gradient colors</label>
+        <div class="grad-row">
+          <input type="color" class="color-pick" id="gColor1" value="#1a56db">
+          <div class="grad-preview" id="gradPreview"></div>
+          <input type="color" class="color-pick" id="gColor2" value="#6366f1">
+        </div>
+      </div>
+    </div>
+
+    <!-- Product picker -->
+    <div class="form-section">
+      <div class="form-section-head"><i class="fas fa-bag-shopping"></i> Select Products for this Banner</div>
+      <div class="form-section-body">
+        <p style="font-size:.78rem;color:var(--muted);margin-bottom:.75rem">Tap products to select them. When a customer taps this banner → they see all selected products.</p>
+        <div class="prod-search-wrap">
+          <i class="fas fa-search"></i>
+          <input class="prod-search-input" id="prodSearch" placeholder="Search products…">
+        </div>
+        <div class="prod-grid" id="prodGrid">
+          <div style="grid-column:1/-1;text-align:center;padding:1rem;color:var(--muted);font-size:.8rem">Loading products…</div>
+        </div>
+        <div class="sel-count" id="selCount">0 products selected</div>
+        <div class="sel-chips" id="selChips"></div>
+      </div>
+    </div>
+
+    <button class="save-btn" id="saveBannerBtn">
+      <i class="fas fa-floppy-disk"></i> Save Banner
+    </button>
+
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const { createClient } = supabase;
+const SB_URL  = "https://kswikkoqfpyxuurzxail.supabase.co";
+const SB_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imtzd2lra29xZnB5eHV1cnp4YWlsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEzNjEzMDQsImV4cCI6MjA4NjkzNzMwNH0.uuoSKWOTeXot1HJys0EO9OcIRBL0mKrNHIUHIAPCpZ4";
+const db = createClient(SB_URL, SB_ANON);
+
+const esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+let _tt;
+function toast(msg, type='info'){
+  const el=document.getElementById('toast');
+  el.innerHTML=`<i class="fas fa-${type==='success'?'check-circle':type==='error'?'circle-xmark':'circle-info'}"></i> ${msg}`;
+  el.className=`toast show ${type}`;
+  clearTimeout(_tt); _tt=setTimeout(()=>el.classList.remove('show'),3200);
+}
+
+// ══════════════════════════════════════════
+//  STATE
+// ══════════════════════════════════════════
+let banners      = [];
+let allProds     = [];
+let selectedPids = new Set(); // selected product IDs
+let imgFile      = null;
+
+// ══════════════════════════════════════════
+//  VIEW SWITCHING
+// ══════════════════════════════════════════
+function showList(){ document.getElementById('viewList').style.display='block'; document.getElementById('viewAdd').style.display='none'; }
+function showAdd() { document.getElementById('viewList').style.display='none';  document.getElementById('viewAdd').style.display='block'; if(!allProds.length) loadProducts(); }
+
+document.getElementById('backToDash').addEventListener('click', () => {
+  window.parent.postMessage({ type: 'switchSection', target: 'dashboard' }, '*');
+});
+document.getElementById('backToList').addEventListener('click', showList);
+document.getElementById('openAddBtn').addEventListener('click', () => {
+  if(banners.length >= 6){ toast('Maximum 6 banners reached. Delete one first.','error'); return; }
+  resetForm();
+  showAdd();
+});
+
+// ══════════════════════════════════════════
+//  BANNER LIST
+// ══════════════════════════════════════════
+async function loadBanners(){
+  document.getElementById('bannerCards').innerHTML = '<div class="spinner"></div>';
+  try {
+    const {data,error} = await db.from('banners').select('*').order('sort_order').limit(6);
+    if(error) throw error;
+    banners = data || [];
+    renderBanners();
+    updateLimitBar();
+    // Update add btn
+    document.getElementById('openAddBtn').disabled = banners.length >= 6;
+  } catch(e){
+    document.getElementById('bannerCards').innerHTML = `<div class="empty-state"><i class="fas fa-triangle-exclamation"></i><h3>Could not load banners</h3><p>${e.message}</p></div>`;
+  }
+}
+
+function updateLimitBar(){
+  const dots = document.querySelectorAll('.ldot');
+  dots.forEach((d,i) => d.classList.toggle('used', i < banners.length));
+  document.getElementById('limitUsed').textContent = banners.length;
+}
+
+function renderBanners(){
+  const wrap = document.getElementById('bannerCards');
+  if(!banners.length){
+    wrap.innerHTML = `<div class="empty-state"><i class="fas fa-image"></i><h3>No banners yet</h3><p>Tap "+ Add Banner" to create your first hero slide</p></div>`;
+    return;
+  }
+  wrap.innerHTML = banners.map((b,i) => {
+    const bg = b.image_url
+      ? `background:url('${esc(b.image_url)}') center/cover`
+      : `background:linear-gradient(135deg,${b.gradient||'#1a56db,#6366f1'})`;
+    const prodCount = (b.product_ids||[]).length;
+    return `<div class="bcard" style="animation-delay:${i*.05}s">
+      <div class="bcard-top" style="${bg}">
+        <div class="bcard-overlay"></div>
+        <div class="bcard-label">
+          ${b.tag?`<div class="bcard-tag">${esc(b.tag)}</div>`:''}
+          <div class="bcard-title">${esc((b.title||'').replace(/<br>/gi,' '))}</div>
+        </div>
+      </div>
+      <div class="bcard-body">
+        <div class="bcard-prods"><strong>${prodCount}</strong> product${prodCount!==1?'s':''} linked ${b.sub?'· '+esc(b.sub):''}</div>
+        <div class="bcard-acts">
+          <div class="bact ${b.is_active?'on':'off'}" data-tog="${b.id}" data-active="${b.is_active}" title="${b.is_active?'Visible':'Hidden'}">
+            <i class="fas fa-${b.is_active?'eye':'eye-slash'}"></i>
+          </div>
+          <div class="bact del" data-del="${b.id}"><i class="fas fa-trash"></i></div>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// List event delegation
+document.getElementById('bannerCards').addEventListener('click', async e => {
+  const tog = e.target.closest('[data-tog]');
+  if(tog){
+    const id=tog.dataset.tog, isOn=tog.dataset.active==='true';
+    await db.from('banners').update({is_active:!isOn}).eq('id',id);
+    banners=banners.map(b=>b.id===id?{...b,is_active:!isOn}:b);
+    renderBanners(); toast(isOn?'Banner hidden':'Banner visible','success');
+    return;
+  }
+  const del = e.target.closest('[data-del]');
+  if(del){
+    if(!confirm('Delete this banner?')) return;
+    await db.from('banners').delete().eq('id',del.dataset.del);
+    banners=banners.filter(b=>b.id!==del.dataset.del);
+    renderBanners(); updateLimitBar();
+    document.getElementById('openAddBtn').disabled = false;
+    toast('Banner deleted','success');
+  }
+});
+
+// ══════════════════════════════════════════
+//  PRODUCTS LOADER
+// ══════════════════════════════════════════
+async function loadProducts(){
+  document.getElementById('prodGrid').innerHTML = `<div style="grid-column:1/-1;text-align:center;padding:1rem;color:var(--muted);font-size:.8rem">Loading…</div>`;
+  try {
+    const {data} = await db.from('products')
+      .select('id,name,title,image_url,images,price,promo_price')
+      .neq('is_active',false)
+      .order('created_at',{ascending:false})
+      .limit(300);
+    allProds = (data||[]).map(p=>({
+      id:    p.id,
+      name:  p.name||p.title||'Product',
+      img:   p.image_url||(Array.isArray(p.images)&&p.images[0])||'',
+      price: p.promo_price||p.price||0
+    }));
+    renderProdGrid('');
+  } catch(e){
+    document.getElementById('prodGrid').innerHTML = `<div style="grid-column:1/-1;color:var(--red);text-align:center;padding:1rem;font-size:.8rem">Failed to load products</div>`;
+  }
+}
+
+function renderProdGrid(q){
+  const grid = document.getElementById('prodGrid');
+  let list = allProds;
+  if(q) list = list.filter(p=>p.name.toLowerCase().includes(q.toLowerCase()));
+  if(!list.length){ grid.innerHTML=`<div style="grid-column:1/-1;text-align:center;padding:1rem;color:var(--muted);font-size:.8rem">No products found</div>`; return; }
+  grid.innerHTML = list.slice(0,120).map(p=>`
+    <div class="pcard${selectedPids.has(p.id)?' sel':''}" data-pid="${p.id}">
+      ${p.img
+        ? `<img class="pcard-img" src="${esc(p.img)}" alt="" loading="lazy" onerror="this.parentElement.innerHTML='<div class=pcard-placeholder><i class=fas fa-image></i></div>'+this.parentElement.innerHTML.replace(this.outerHTML,'')">`
+        : `<div class="pcard-placeholder"><i class="fas fa-image"></i></div>`}
+      <div class="pcard-name">${esc(p.name)}</div>
+    </div>`).join('');
+}
+
+function updateSelChips(){
+  const count = selectedPids.size;
+  document.getElementById('selCount').textContent = `${count} product${count!==1?'s':''} selected`;
+  const chips = document.getElementById('selChips');
+  chips.innerHTML = [...selectedPids].map(id=>{
+    const p = allProds.find(x=>x.id===id);
+    if(!p) return '';
+    return `<div class="sel-chip" data-cid="${id}">
+      ${p.img?`<img src="${esc(p.img)}" alt="">`:``}
+      ${esc(p.name.slice(0,18))}
+      <span class="sel-chip-x">✕</span>
+    </div>`;
+  }).join('');
+}
+
+// Product grid click
+document.getElementById('prodGrid').addEventListener('click', e=>{
+  const card = e.target.closest('[data-pid]');
+  if(!card) return;
+  const id = card.dataset.pid;
+  if(selectedPids.has(id)) selectedPids.delete(id);
+  else selectedPids.add(id);
+  card.classList.toggle('sel', selectedPids.has(id));
+  updateSelChips();
+});
+
+// Chip remove
+document.getElementById('selChips').addEventListener('click', e=>{
+  const chip = e.target.closest('[data-cid]');
+  if(chip && e.target.classList.contains('sel-chip-x')){
+    selectedPids.delete(chip.dataset.cid);
+    renderProdGrid(document.getElementById('prodSearch').value);
+    updateSelChips();
+  }
+});
+
+// Search
+let sTimer;
+document.getElementById('prodSearch').addEventListener('input', e=>{
+  clearTimeout(sTimer);
+  sTimer = setTimeout(()=>renderProdGrid(e.target.value), 200);
+});
+
+// ══════════════════════════════════════════
+//  GRADIENT PREVIEW
+// ══════════════════════════════════════════
+function updateGradPreview(){
+  const c1=document.getElementById('gColor1').value;
+  const c2=document.getElementById('gColor2').value;
+  document.getElementById('gradPreview').style.background=`linear-gradient(135deg,${c1},${c2})`;
+}
+document.getElementById('gColor1').addEventListener('input', updateGradPreview);
+document.getElementById('gColor2').addEventListener('input', updateGradPreview);
+updateGradPreview();
+
+// ══════════════════════════════════════════
+//  IMAGE UPLOAD PREVIEW
+// ══════════════════════════════════════════
+document.getElementById('imgInput').addEventListener('change', e=>{
+  const file = e.target.files[0]; if(!file) return;
+  imgFile = file;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    const drop = document.getElementById('imgDrop');
+    // inject preview img behind the input
+    const existingImg = drop.querySelector('img');
+    if(existingImg) existingImg.remove();
+    const img = document.createElement('img');
+    img.src = ev.target.result;
+    img.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:8px;';
+    drop.insertBefore(img, drop.firstChild);
+    drop.classList.add('has-img');
+  };
+  reader.readAsDataURL(file);
+});
+
+// ══════════════════════════════════════════
+//  SAVE BANNER
+// ══════════════════════════════════════════
+document.getElementById('saveBannerBtn').addEventListener('click', async()=>{
+  const title = document.getElementById('bTitle').value.trim();
+  if(!title){ toast('Please enter a title','error'); return; }
+  if(selectedPids.size === 0){ toast('Please select at least one product','error'); return; }
+
+  const btn = document.getElementById('saveBannerBtn');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving…';
+
+  try {
+    let image_url = null;
+
+    // Upload image if chosen
+    if(imgFile){
+      const ext  = imgFile.name.split('.').pop();
+      const path = `banners/${Date.now()}.${ext}`;
+      const {error:upErr} = await db.storage.from('product-images').upload(path, imgFile, {upsert:true});
+      if(upErr) throw new Error('Image upload failed: '+upErr.message);
+      const {data:{publicUrl}} = db.storage.from('product-images').getPublicUrl(path);
+      image_url = publicUrl;
+    }
+
+    const c1 = document.getElementById('gColor1').value;
+    const c2 = document.getElementById('gColor2').value;
+
+    const {error} = await db.from('banners').insert({
+      title:       title,
+      sub:         document.getElementById('bSub').value.trim()||null,
+      tag:         document.getElementById('bTag').value.trim()||null,
+      btn_text:    document.getElementById('bBtn').value.trim()||'Shop Now',
+      gradient:    `${c1},${c2}`,
+      image_url,
+      product_ids: [...selectedPids],
+      is_active:   true,
+      sort_order:  banners.length + 1
+    });
+    if(error) throw error;
+
+    toast('Banner saved! ✅','success');
+    resetForm();
+    await loadBanners();
+    showList();
+
+  } catch(e){
+    toast('Error: '+e.message,'error');
+  }
+  btn.disabled = false;
+  btn.innerHTML = '<i class="fas fa-floppy-disk"></i> Save Banner';
+});
+
+// ══════════════════════════════════════════
+//  RESET FORM
+// ══════════════════════════════════════════
+function resetForm(){
+  ['bTitle','bSub','bTag','bBtn'].forEach(id=>{ const el=document.getElementById(id); if(el) el.value=''; });
+  document.getElementById('gColor1').value='#1a56db';
+  document.getElementById('gColor2').value='#6366f1';
+  updateGradPreview();
+  const drop = document.getElementById('imgDrop');
+  const img  = drop.querySelector('img');
+  if(img) img.remove();
+  drop.classList.remove('has-img');
+  imgFile = null;
+  selectedPids.clear();
+  updateSelChips();
+  if(allProds.length) renderProdGrid('');
+  document.getElementById('prodSearch').value = '';
+}
+
+// ══════════════════════════════════════════
+//  INIT
+// ══════════════════════════════════════════
+loadBanners();
+
+// Listen for switchSection messages from parent
+window.addEventListener('message', e=>{
+  if(e.data?.type==='openBannerManager') showList();
+});
+</script>
+</body>
+</html>

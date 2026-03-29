@@ -1,0 +1,679 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
+<title>Manage Products — MC Store</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+:root{
+  --blue:#1a56db;--blue-dk:#1347c8;--blue-lt:#eff6ff;--blue-md:#dbeafe;
+  --white:#fff;--bg:#f0f7ff;--text:#0f172a;--muted:#64748b;--border:#e2e8f0;
+  --green:#16a34a;--green-lt:#dcfce7;--red:#dc2626;--red-lt:#fef2f2;
+  --gold:#f59e0b;--gold-lt:#fefce8;
+}
+html,body{min-height:100vh;background:var(--bg);font-family:'DM Sans',sans-serif;color:var(--text);}
+
+/* TOP BAR */
+.topbar{position:sticky;top:0;z-index:50;background:var(--white);border-bottom:1.5px solid var(--border);padding:0 1rem;height:56px;display:flex;align-items:center;gap:.75rem;box-shadow:0 2px 8px rgba(26,86,219,.07);}
+.topbar-title{font-weight:800;font-size:1rem;flex:1;}
+.topbar-title span{color:var(--blue);}
+.topbar-count{background:var(--blue-lt);color:var(--blue);font-size:.72rem;font-weight:700;padding:3px 9px;border-radius:20px;border:1px solid var(--blue-md);}
+
+/* TOOLBAR */
+.toolbar{padding:.85rem 1rem .6rem;display:flex;flex-direction:column;gap:.6rem;background:var(--white);border-bottom:1px solid var(--border);}
+.search-wrap{position:relative;}
+.search-wrap input{width:100%;padding:.65rem 1rem .65rem 2.5rem;background:var(--bg);border:1.5px solid var(--border);border-radius:12px;font-family:'DM Sans',sans-serif;font-size:.88rem;color:var(--text);outline:none;transition:border-color .2s;}
+.search-wrap input:focus{border-color:var(--blue);background:var(--white);}
+.search-wrap i{position:absolute;left:.85rem;top:50%;transform:translateY(-50%);color:var(--muted);font-size:.85rem;pointer-events:none;}
+.filter-row{display:flex;gap:.5rem;overflow-x:auto;padding-bottom:2px;}
+.filter-row::-webkit-scrollbar{display:none;}
+.chip{flex-shrink:0;padding:5px 12px;border-radius:20px;font-size:.75rem;font-weight:700;border:1.5px solid var(--border);background:var(--white);color:var(--muted);cursor:pointer;transition:all .15s;white-space:nowrap;-webkit-tap-highlight-color:transparent;}
+.chip.active{background:var(--blue);border-color:var(--blue);color:white;}
+
+/* STATS */
+.stats-row{display:grid;grid-template-columns:repeat(3,1fr);gap:.6rem;padding:.85rem 1rem;}
+.stat-box{background:var(--white);border:1.5px solid var(--border);border-radius:14px;padding:.85rem .75rem;text-align:center;}
+.stat-num{font-size:1.3rem;font-weight:800;color:var(--blue);}
+.stat-lbl{font-size:.68rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-top:2px;}
+
+/* PRODUCT LIST */
+.product-list{padding:0 1rem 5rem;display:flex;flex-direction:column;gap:.75rem;}
+
+.product-card{
+  background:var(--white);border:1.5px solid var(--border);border-radius:16px;
+  display:flex;align-items:stretch;
+  /* NO overflow:hidden — that was clipping the dropdown */
+  position:relative;transition:box-shadow .2s;animation:cardIn .3s ease both;
+}
+@keyframes cardIn{from{opacity:0;transform:translateY(8px);}to{opacity:1;transform:none;}}
+.product-card:hover{box-shadow:0 4px 20px rgba(26,86,219,.12);}
+
+/* image */
+.card-img-wrap{width:105px;min-height:110px;flex-shrink:0;background:var(--bg);border-radius:14px 0 0 14px;overflow:hidden;}
+.card-img{width:100%;height:100%;object-fit:cover;display:block;}
+.card-img-ph{width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:#cbd5e1;font-size:2rem;}
+.img-count{position:absolute;bottom:5px;left:5px;background:rgba(0,0,0,.55);color:white;font-size:.68rem;font-weight:700;padding:2px 7px;border-radius:10px;}
+
+/* body */
+.card-body{flex:1;padding:.75rem .75rem .75rem .85rem;display:flex;flex-direction:column;gap:.3rem;min-width:0;overflow:hidden;}
+.card-name{font-weight:700;font-size:.9rem;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding-right:36px;}
+.card-cat{font-size:.72rem;color:var(--muted);font-weight:500;}
+.card-price-row{display:flex;align-items:center;gap:.5rem;margin-top:2px;}
+.card-price{font-size:1rem;font-weight:800;color:var(--text);}
+.card-promo{font-size:.75rem;color:var(--muted);text-decoration:line-through;}
+.card-meta-row{display:flex;align-items:center;gap:.4rem;margin-top:4px;flex-wrap:wrap;}
+.badge{padding:3px 8px;border-radius:20px;font-size:.67rem;font-weight:700;display:inline-flex;align-items:center;gap:3px;}
+.badge-active{background:var(--green-lt);color:var(--green);}
+.badge-inactive{background:var(--red-lt);color:var(--red);}
+.badge-stock{background:var(--blue-lt);color:var(--blue);}
+.badge-low{background:var(--gold-lt);color:var(--gold);}
+.badge-out{background:var(--red-lt);color:var(--red);}
+.badge-section{background:#f0fdf4;color:#15803d;}
+
+/* 3-dot button */
+.card-menu-btn{
+  position:absolute;top:8px;right:8px;
+  width:32px;height:32px;border-radius:50%;
+  background:var(--bg);border:1px solid var(--border);
+  display:flex;align-items:center;justify-content:center;
+  cursor:pointer;font-size:.85rem;color:var(--muted);
+  transition:all .15s;-webkit-tap-highlight-color:transparent;
+  z-index:2;
+}
+.card-menu-btn:hover{background:var(--blue-lt);color:var(--blue);border-color:var(--blue);}
+
+/* DROPDOWN — fixed position portal, rendered outside cards */
+.dropdown-portal{
+  position:fixed;
+  background:var(--white);
+  border:1.5px solid var(--border);
+  border-radius:14px;
+  box-shadow:0 8px 40px rgba(0,0,0,.16);
+  z-index:999;
+  min-width:170px;
+  overflow:hidden;
+  opacity:0;pointer-events:none;
+  transform:scale(.92) translateY(-6px);
+  transform-origin:top right;
+  transition:opacity .15s, transform .15s cubic-bezier(.34,1.56,.64,1);
+}
+.dropdown-portal.open{
+  opacity:1;pointer-events:all;
+  transform:scale(1) translateY(0);
+}
+.dropdown-item{
+  display:flex;align-items:center;gap:10px;
+  padding:13px 16px;font-size:.875rem;font-weight:600;
+  cursor:pointer;transition:background .12s;
+  -webkit-tap-highlight-color:transparent;
+  border:none;background:none;width:100%;text-align:left;
+}
+.dropdown-item:hover{background:var(--bg);}
+.dropdown-item.edit  {color:var(--blue);}
+.dropdown-item.toggle{color:var(--gold);}
+.dropdown-item.delete{color:var(--red);}
+.dropdown-item i{width:16px;text-align:center;flex-shrink:0;}
+.dropdown-divider{height:1px;background:var(--border);margin:2px 0;}
+
+/* EMPTY / LOADING */
+.empty-state{text-align:center;padding:4rem 2rem;color:var(--muted);}
+.empty-icon{font-size:3.5rem;margin-bottom:1rem;opacity:.4;}
+.empty-state h3{font-size:1.05rem;font-weight:700;color:var(--text);margin-bottom:.35rem;}
+.loading-wrap{text-align:center;padding:3rem;}
+.spinner-big{width:36px;height:36px;border:3px solid var(--border);border-top-color:var(--blue);border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 1rem;}
+@keyframes spin{to{transform:rotate(360deg);}}
+
+/* EDIT SHEET */
+.sheet-bd{position:fixed;inset:0;background:rgba(15,23,42,.5);z-index:200;opacity:0;pointer-events:none;transition:opacity .25s;}
+.sheet-bd.open{opacity:1;pointer-events:all;}
+.sheet{position:fixed;bottom:0;left:0;right:0;background:var(--white);border-radius:24px 24px 0 0;z-index:201;max-height:92vh;overflow-y:auto;transform:translateY(100%);transition:transform .3s cubic-bezier(.34,1.20,.64,1);padding-bottom:env(safe-area-inset-bottom,16px);}
+.sheet.open{transform:translateY(0);}
+.sheet-handle{width:40px;height:4px;border-radius:2px;background:var(--border);margin:12px auto 0;}
+.sheet-head{padding:1rem 1.25rem .75rem;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);}
+.sheet-title{font-weight:800;font-size:1rem;}
+.sheet-close{width:32px;height:32px;border-radius:50%;background:var(--bg);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:.85rem;color:var(--muted);-webkit-tap-highlight-color:transparent;}
+.sheet-body{padding:1rem 1.25rem 1.5rem;}
+.slot-label{font-size:.75rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;}
+.img-slots{display:flex;gap:.6rem;overflow-x:auto;padding-bottom:4px;margin-bottom:1rem;}
+.img-slots::-webkit-scrollbar{display:none;}
+.img-slot{flex-shrink:0;width:80px;height:80px;border-radius:12px;border:2px dashed var(--border);background:var(--bg);display:flex;align-items:center;justify-content:center;cursor:pointer;position:relative;overflow:hidden;transition:border-color .2s;}
+.img-slot:hover{border-color:var(--blue);}
+.img-slot.filled{border-style:solid;border-color:var(--border);}
+.img-slot img{width:100%;height:100%;object-fit:cover;}
+.add-ic{color:var(--blue);font-size:1.4rem;}
+.remove-img{position:absolute;top:3px;right:3px;width:20px;height:20px;border-radius:50%;background:rgba(0,0,0,.65);color:white;display:flex;align-items:center;justify-content:center;font-size:.6rem;cursor:pointer;z-index:1;}
+.form-field{margin-bottom:.9rem;}
+.form-label{display:block;font-size:.73rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px;}
+.form-label .req{color:var(--red);}
+.form-input,.form-select,.form-textarea{width:100%;padding:.72rem 1rem;background:var(--bg);border:1.5px solid var(--border);border-radius:12px;font-family:'DM Sans',sans-serif;font-size:.9rem;color:var(--text);outline:none;transition:border-color .2s,background .2s;}
+.form-input:focus,.form-select:focus,.form-textarea:focus{border-color:var(--blue);background:var(--white);}
+.form-textarea{resize:vertical;min-height:88px;}
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:.75rem;}
+.form-hint{font-size:.72rem;color:var(--muted);margin-top:3px;text-align:right;}
+.btn-save{width:100%;padding:1rem;background:linear-gradient(148deg,#3b82f6,var(--blue),var(--blue-dk));color:white;border:none;border-radius:14px;font-family:'DM Sans',sans-serif;font-size:.95rem;font-weight:800;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;margin-top:1.1rem;box-shadow:0 5px 0 #0f3fa6,0 8px 24px rgba(26,86,219,.28);transition:transform .15s,box-shadow .15s;-webkit-tap-highlight-color:transparent;}
+.btn-save:hover{transform:translateY(-2px);box-shadow:0 7px 0 #0f3fa6,0 12px 28px rgba(26,86,219,.35);}
+.btn-save:active{transform:translateY(3px);box-shadow:0 2px 0 #0f3fa6;}
+.btn-save:disabled{opacity:.6;cursor:not-allowed;transform:none;}
+
+/* DELETE CONFIRM */
+.confirm-bd{position:fixed;inset:0;background:rgba(15,23,42,.5);z-index:400;display:flex;align-items:center;justify-content:center;padding:1.5rem;opacity:0;pointer-events:none;transition:opacity .2s;}
+.confirm-bd.open{opacity:1;pointer-events:all;}
+.confirm-box{background:var(--white);border-radius:20px;padding:1.5rem;max-width:300px;width:100%;box-shadow:0 24px 60px rgba(0,0,0,.2);text-align:center;transform:scale(.9);transition:transform .2s cubic-bezier(.34,1.56,.64,1);}
+.confirm-bd.open .confirm-box{transform:scale(1);}
+.confirm-icon{font-size:2.5rem;margin-bottom:.6rem;}
+.confirm-title{font-weight:800;font-size:1rem;margin-bottom:.3rem;}
+.confirm-sub{font-size:.82rem;color:var(--muted);margin-bottom:1.1rem;line-height:1.5;}
+.confirm-btns{display:flex;gap:.6rem;}
+.btn-cancel{flex:1;padding:.75rem;background:var(--bg);border:1.5px solid var(--border);border-radius:12px;font-family:'DM Sans',sans-serif;font-weight:700;font-size:.88rem;cursor:pointer;color:var(--muted);}
+.btn-del-confirm{flex:1;padding:.75rem;background:var(--red);border:none;border-radius:12px;font-family:'DM Sans',sans-serif;font-weight:700;font-size:.88rem;cursor:pointer;color:white;}
+
+/* TOAST */
+.toast{position:fixed;bottom:1.5rem;left:50%;transform:translateX(-50%) translateY(80px);background:var(--white);border:1.5px solid var(--border);border-radius:12px;padding:.7rem 1.2rem;font-size:.85rem;font-weight:600;box-shadow:0 8px 32px rgba(0,0,0,.12);display:flex;align-items:center;gap:8px;z-index:999;transition:transform .3s cubic-bezier(.34,1.56,.64,1);white-space:nowrap;}
+.toast.show{transform:translateX(-50%) translateY(0);}
+.toast.success{border-color:#bbf7d0;color:var(--green);}
+.toast.error{border-color:#fecaca;color:var(--red);}
+.toast.info{border-color:var(--blue-md);color:var(--blue);}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-title">My <span>Products</span></div>
+  <span class="topbar-count" id="productCount">Loading…</span>
+</div>
+
+<div class="toolbar">
+  <div class="search-wrap">
+    <i class="fas fa-search"></i>
+    <input type="text" id="searchInput" placeholder="Search products…">
+  </div>
+  <div class="filter-row">
+    <div class="chip active" onclick="setFilter('all',this)">All</div>
+    <div class="chip" onclick="setFilter('active',this)">Active</div>
+    <div class="chip" onclick="setFilter('inactive',this)">Inactive</div>
+    <div class="chip" onclick="setFilter('low',this)">Low Stock</div>
+    <div class="chip" onclick="setFilter('out',this)">Out of Stock</div>
+  </div>
+</div>
+
+<div class="stats-row">
+  <div class="stat-box"><div class="stat-num" id="statTotal">0</div><div class="stat-lbl">Total</div></div>
+  <div class="stat-box"><div class="stat-num" id="statActive" style="color:var(--green)">0</div><div class="stat-lbl">Active</div></div>
+  <div class="stat-box"><div class="stat-num" id="statLow" style="color:var(--gold)">0</div><div class="stat-lbl">Low Stock</div></div>
+</div>
+
+<div class="product-list" id="productList">
+  <div class="loading-wrap">
+    <div class="spinner-big"></div>
+    <div style="color:var(--muted);font-size:.88rem">Loading products…</div>
+  </div>
+</div>
+
+<!-- DROPDOWN PORTAL — outside all cards, positioned by JS -->
+<div class="dropdown-portal" id="dropdownPortal">
+  <button class="dropdown-item edit"   id="menuEdit">  <i class="fas fa-pen-to-square"></i> Edit product</button>
+  <button class="dropdown-item toggle" id="menuToggle"><i class="fas fa-eye-slash"></i> Deactivate</button>
+  <div class="dropdown-divider"></div>
+  <button class="dropdown-item delete" id="menuDelete"><i class="fas fa-trash-can"></i> Delete</button>
+</div>
+
+<!-- CLICK OUTSIDE OVERLAY -->
+<div id="menuOverlay" style="position:fixed;inset:0;z-index:998;display:none;" onclick="closeMenu()"></div>
+
+<!-- EDIT SHEET -->
+<div class="sheet-bd" id="sheetBd" onclick="closeSheet()"></div>
+<div class="sheet" id="editSheet">
+  <div class="sheet-handle"></div>
+  <div class="sheet-head">
+    <div class="sheet-title">Edit Product</div>
+    <div class="sheet-close" onclick="closeSheet()"><i class="fas fa-times"></i></div>
+  </div>
+  <div class="sheet-body">
+    <input type="hidden" id="editId">
+
+    <div class="slot-label">Photos <span style="font-weight:400;text-transform:none;color:var(--muted)">(first = main)</span></div>
+    <div class="img-slots" id="imgSlots"></div>
+    <input type="file" id="imgFileInput" accept="image/*" multiple style="display:none">
+
+    <div class="form-field">
+      <label class="form-label">Product Name <span class="req">*</span></label>
+      <input class="form-input" id="editName" maxlength="70">
+      <div class="form-hint"><span id="nameCC">0</span>/70</div>
+    </div>
+    <div class="form-row">
+      <div class="form-field">
+        <label class="form-label">Price (₦) <span class="req">*</span></label>
+        <input class="form-input" id="editPrice" type="number" min="0">
+      </div>
+      <div class="form-field">
+        <label class="form-label">Promo Price (₦)</label>
+        <input class="form-input" id="editPromo" type="number" min="0">
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-field">
+        <label class="form-label">Stock <span class="req">*</span></label>
+        <input class="form-input" id="editStock" type="number" min="0">
+      </div>
+      <div class="form-field">
+        <label class="form-label">Condition</label>
+        <select class="form-select" id="editCondition">
+          <option>New</option><option>Like New</option><option>Excellent</option>
+          <option>Good</option><option>Fair</option><option>Used</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-field">
+        <label class="form-label">Category <span class="req">*</span></label>
+        <select class="form-select" id="editCategory">
+          <option value="">Select…</option>
+          <option>Electronics</option><option>Mobile Phones</option>
+          <option>Phone Accessories</option><option>Laptops or accessories</option>
+          <option>Tablets</option><option>Cameras</option><option>Home Appliances</option>
+          <option>Fashion</option><option>Shoes</option><option>Bags &amp; Accessories</option>
+          <option>Sports &amp; Outdoors</option><option>Toys &amp; Games</option>
+          <option>Books &amp; Stationery</option><option>Cars &amp; Vehicles</option>
+          <option>Others</option>
+        </select>
+      </div>
+      <div class="form-field">
+        <label class="form-label">Section</label>
+        <select class="form-select" id="editSection">
+          <option value="Normal">None</option>
+          <option value="Featured Products">Featured Products</option>
+          <option value="New Arrivals">New Arrivals</option>
+          <option value="Flash Deals">Flash Deals</option>
+          <option value="Top Picks">Top Picks</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-field">
+      <label class="form-label">Description</label>
+      <textarea class="form-textarea" id="editDesc" maxlength="850"></textarea>
+      <div class="form-hint"><span id="descCC">0</span>/850</div>
+    </div>
+    <button class="btn-save" id="saveBtn" onclick="saveProduct()">
+      <i class="fas fa-check"></i> Save Changes
+    </button>
+  </div>
+</div>
+
+<!-- DELETE CONFIRM -->
+<div class="confirm-bd" id="confirmBd">
+  <div class="confirm-box">
+    <div class="confirm-icon">🗑️</div>
+    <div class="confirm-title">Delete Product?</div>
+    <div class="confirm-sub" id="confirmSub">This will permanently remove the product.</div>
+    <div class="confirm-btns">
+      <button class="btn-cancel" onclick="closeConfirm()">Cancel</button>
+      <button class="btn-del-confirm" id="confirmBtn">Delete</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ── SUPABASE ──
+const { createClient } = supabase;
+const SB_URL  = "https://kswikkoqfpyxuurzxail.supabase.co";
+const SB_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imtzd2lra29xZnB5eHV1cnp4YWlsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEzNjEzMDQsImV4cCI6MjA4NjkzNzMwNH0.uuoSKWOTeXot1HJys0EO9OcIRBL0mKrNHIUHIAPCpZ4";
+const db = createClient(SB_URL, SB_ANON);
+
+// ── STATE ──
+let allProducts   = [];
+let currentFilter = 'all';
+let editingImages = [];   // [{url, file?}]
+let deleteTarget  = null;
+let menuTargetId  = null; // which product the open menu belongs to
+
+// ── LOAD ──
+async function load() {
+  try {
+    const { data, error } = await db.from('products').select('*').order('created_at', { ascending: false });
+    if (error) throw error;
+    allProducts = data || [];
+    updateStats();
+    renderFiltered();
+  } catch(e) {
+    document.getElementById('productList').innerHTML =
+      `<div class="empty-state"><div class="empty-icon">⚠️</div><h3>Could not load products</h3><p style="font-size:.82rem">${e.message}</p></div>`;
+  }
+}
+
+// ── STATS ──
+function updateStats() {
+  const total  = allProducts.length;
+  const active = allProducts.filter(p => p.is_active !== false).length;
+  const low    = allProducts.filter(p => (p.stock||0) > 0 && (p.stock||0) <= 5).length;
+  document.getElementById('statTotal').textContent  = total;
+  document.getElementById('statActive').textContent = active;
+  document.getElementById('statLow').textContent    = low;
+  document.getElementById('productCount').textContent = `${total} product${total!==1?'s':''}`;
+}
+
+// ── FILTER ──
+function setFilter(f, el) {
+  currentFilter = f;
+  document.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
+  el.classList.add('active');
+  renderFiltered();
+}
+
+function renderFiltered() {
+  const q = (document.getElementById('searchInput').value || '').toLowerCase().trim();
+  let list = [...allProducts];
+  if (currentFilter === 'active')   list = list.filter(p => p.is_active !== false);
+  if (currentFilter === 'inactive') list = list.filter(p => p.is_active === false);
+  if (currentFilter === 'low')      list = list.filter(p => (p.stock||0) > 0 && (p.stock||0) <= 5);
+  if (currentFilter === 'out')      list = list.filter(p => (p.stock||0) === 0);
+  if (q) list = list.filter(p =>
+    (p.name||p.title||'').toLowerCase().includes(q) ||
+    (p.category||'').toLowerCase().includes(q)
+  );
+  renderList(list);
+}
+
+// ── RENDER ──
+function renderList(list) {
+  const wrap = document.getElementById('productList');
+  if (!list.length) {
+    wrap.innerHTML = `<div class="empty-state"><div class="empty-icon"><i class="fas fa-box-open"></i></div><h3>No products found</h3><p style="font-size:.82rem;margin-top:.3rem">Try a different search or filter</p></div>`;
+    return;
+  }
+  wrap.innerHTML = list.map((p, i) => {
+    const name   = esc(p.name || p.title || 'Unnamed');
+    const price  = Number(p.price || 0);
+    const promo  = Number(p.promo_price || 0);
+    const stock  = p.stock ?? 0;
+    const active = p.is_active !== false;
+    const img    = p.image_url || (Array.isArray(p.images) && p.images[0]) || '';
+    const imgCnt = Array.isArray(p.images) ? p.images.filter(Boolean).length : (img ? 1 : 0);
+    const disp   = (promo > 0 && promo < price) ? promo : price;
+    const stockB = stock === 0
+      ? `<span class="badge badge-out"><i class="fas fa-times-circle"></i>Out of stock</span>`
+      : stock <= 5
+      ? `<span class="badge badge-low"><i class="fas fa-exclamation-circle"></i>${stock} left</span>`
+      : `<span class="badge badge-stock"><i class="fas fa-cubes"></i>${stock} in stock</span>`;
+    const secB = p.section && p.section !== 'Normal'
+      ? `<span class="badge badge-section">${p.section}</span>` : '';
+
+    return `
+    <div class="product-card" style="animation-delay:${i*.04}s">
+      <div class="card-img-wrap">
+        ${img ? `<img class="card-img" src="${img}" alt="" loading="lazy" onerror="this.parentNode.innerHTML='<div class=card-img-ph><i class=fas fa-image></i></div>'">` : `<div class="card-img-ph"><i class="fas fa-image"></i></div>`}
+        ${imgCnt > 1 ? `<div class="img-count"><i class="fas fa-camera"></i> ${imgCnt}</div>` : ''}
+      </div>
+      <div class="card-body">
+        <div class="card-name">${name}</div>
+        <div class="card-cat"><i class="fas fa-tag" style="font-size:.65rem;margin-right:3px"></i>${p.category||'No category'}</div>
+        <div class="card-price-row">
+          <div class="card-price">₦${disp.toLocaleString('en-NG')}</div>
+          ${promo > 0 && promo < price ? `<div class="card-promo">₦${price.toLocaleString('en-NG')}</div>` : ''}
+        </div>
+        <div class="card-meta-row">
+          <span class="badge ${active?'badge-active':'badge-inactive'}">
+            <i class="fas fa-circle" style="font-size:5px"></i>${active?'Active':'Inactive'}
+          </span>
+          ${stockB}${secB}
+        </div>
+      </div>
+      <div class="card-menu-btn" data-id="${p.id}" onclick="openMenu(event, '${p.id}')">
+        <i class="fas fa-ellipsis-vertical"></i>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ── DROPDOWN MENU (portal approach — no clipping) ──
+function openMenu(event, id) {
+  event.stopPropagation();
+  menuTargetId = id;
+
+  const btn      = event.currentTarget;
+  const portal   = document.getElementById('dropdownPortal');
+  const overlay  = document.getElementById('menuOverlay');
+  const p        = allProducts.find(x => x.id === id);
+  const active   = p ? p.is_active !== false : true;
+
+  // Update toggle label
+  const toggleBtn = document.getElementById('menuToggle');
+  toggleBtn.innerHTML = active
+    ? `<i class="fas fa-eye-slash"></i> Deactivate`
+    : `<i class="fas fa-eye"></i> Activate`;
+
+  // Position portal near the button
+  const rect = btn.getBoundingClientRect();
+  portal.style.top   = (rect.bottom + 6) + 'px';
+  portal.style.right = (window.innerWidth - rect.right) + 'px';
+  portal.style.left  = 'auto';
+
+  portal.classList.add('open');
+  overlay.style.display = 'block';
+}
+
+function closeMenu() {
+  document.getElementById('dropdownPortal').classList.remove('open');
+  document.getElementById('menuOverlay').style.display = 'none';
+  menuTargetId = null;
+}
+
+// Wire up portal buttons (done once, not in innerHTML)
+document.getElementById('menuEdit').onclick = function() {
+  const id = menuTargetId; closeMenu(); openEdit(id);
+};
+document.getElementById('menuToggle').onclick = async function() {
+  const id = menuTargetId;
+  const p  = allProducts.find(x => x.id === id);
+  closeMenu();
+  if (!p) return;
+  const newVal = !(p.is_active !== false);
+  try {
+    const { error } = await db.from('products').update({ is_active: newVal, updated_at: new Date().toISOString() }).eq('id', id);
+    if (error) throw error;
+    p.is_active = newVal;
+    updateStats(); renderFiltered();
+    showToast(`Product ${newVal ? 'activated ✅' : 'deactivated'}`, 'success');
+  } catch(e) { showToast('Update failed: ' + e.message, 'error'); }
+};
+document.getElementById('menuDelete').onclick = function() {
+  const id = menuTargetId;
+  const p  = allProducts.find(x => x.id === id);
+  closeMenu();
+  if (!p) return;
+  deleteTarget = id;
+  document.getElementById('confirmSub').textContent = `"${p.name || p.title || 'This product'}" will be permanently removed.`;
+  document.getElementById('confirmBd').classList.add('open');
+  document.getElementById('confirmBtn').onclick = doDelete;
+};
+
+// ── DELETE ──
+function closeConfirm() {
+  document.getElementById('confirmBd').classList.remove('open');
+  deleteTarget = null;
+}
+async function doDelete() {
+  if (!deleteTarget) return;
+  try {
+    const { error } = await db.from('products').delete().eq('id', deleteTarget);
+    if (error) throw error;
+    allProducts = allProducts.filter(p => p.id !== deleteTarget);
+    updateStats(); renderFiltered(); closeConfirm();
+    showToast('Product deleted', 'success');
+  } catch(e) { showToast('Delete failed: ' + e.message, 'error'); }
+}
+
+// ── OPEN EDIT SHEET ──
+function openEdit(id) {
+  const p = allProducts.find(x => x.id === id);
+  if (!p) return;
+
+  document.getElementById('editId').value        = id;
+  document.getElementById('editName').value      = p.name || p.title || '';
+  document.getElementById('editPrice').value     = p.price || '';
+  document.getElementById('editPromo').value     = p.promo_price || '';
+  document.getElementById('editStock').value     = p.stock ?? 1;
+  document.getElementById('editCondition').value = p.condition || 'New';
+  document.getElementById('editCategory').value  = p.category || '';
+  document.getElementById('editSection').value   = p.section || 'Normal';
+  document.getElementById('editDesc').value      = p.description || '';
+
+  // char counts
+  document.getElementById('nameCC').textContent = (p.name||p.title||'').length;
+  document.getElementById('descCC').textContent = (p.description||'').length;
+
+  // Images
+  const imgs = [];
+  if (p.image_url) imgs.push(p.image_url);
+  if (Array.isArray(p.images)) p.images.forEach(u => { if (u && !imgs.includes(u)) imgs.push(u); });
+  editingImages = imgs.map(url => ({ url }));
+  renderSlots();
+
+  document.getElementById('sheetBd').classList.add('open');
+  document.getElementById('editSheet').classList.add('open');
+}
+
+function closeSheet() {
+  document.getElementById('sheetBd').classList.remove('open');
+  document.getElementById('editSheet').classList.remove('open');
+  editingImages = [];
+}
+
+// ── IMAGE SLOTS ──
+function renderSlots() {
+  const wrap = document.getElementById('imgSlots');
+  wrap.innerHTML = editingImages.map((img, i) => `
+    <div class="img-slot filled">
+      <img src="${img.url}" alt="">
+      <div class="remove-img" onclick="removeImg(${i})"><i class="fas fa-times" style="font-size:.55rem"></i></div>
+    </div>`).join('') +
+    (editingImages.length < 6
+      ? `<div class="img-slot" onclick="document.getElementById('imgFileInput').click()"><i class="fas fa-plus add-ic"></i></div>`
+      : '');
+}
+
+function removeImg(i) { editingImages.splice(i, 1); renderSlots(); }
+
+document.getElementById('imgFileInput').addEventListener('change', function() {
+  Array.from(this.files).forEach(f => {
+    if (editingImages.length >= 6) return;
+    editingImages.push({ url: URL.createObjectURL(f), file: f });
+  });
+  renderSlots();
+  this.value = '';
+});
+
+document.getElementById('editName').addEventListener('input', function() {
+  document.getElementById('nameCC').textContent = this.value.length;
+});
+document.getElementById('editDesc').addEventListener('input', function() {
+  document.getElementById('descCC').textContent = this.value.length;
+});
+
+// ── SAVE PRODUCT ──
+async function saveProduct() {
+  const id       = document.getElementById('editId').value;
+  const name     = document.getElementById('editName').value.trim();
+  const price    = document.getElementById('editPrice').value;
+  const promo    = document.getElementById('editPromo').value;
+  const stock    = document.getElementById('editStock').value;
+  const category = document.getElementById('editCategory').value;
+  const section  = document.getElementById('editSection').value;
+  const desc     = document.getElementById('editDesc').value.trim();
+  const cond     = document.getElementById('editCondition').value;
+
+  if (!name)     { showToast('Product name is required', 'error'); return; }
+  if (!price)    { showToast('Price is required', 'error'); return; }
+  if (!category) { showToast('Please select a category', 'error'); return; }
+  if (!editingImages.length) { showToast('Add at least one photo', 'error'); return; }
+
+  const btn = document.getElementById('saveBtn');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving…';
+
+  try {
+    // Upload any new image files
+    const uploaded = [];
+    for (const img of editingImages.filter(x => x.file)) {
+      const fname = `products/${id}_${Date.now()}_${img.file.name}`;
+      const { error: upErr } = await db.storage.from('product-images').upload(fname, img.file, { upsert: true });
+      if (upErr) throw new Error('Upload failed: ' + upErr.message);
+      const { data: { publicUrl } } = db.storage.from('product-images').getPublicUrl(fname);
+      uploaded.push(publicUrl);
+    }
+    const allUrls = [...editingImages.filter(x => !x.file).map(x => x.url), ...uploaded];
+
+    const updates = {
+      name,
+      title:       name,
+      price:       parseFloat(price),
+      promo_price: promo ? parseFloat(promo) : null,
+      stock:       parseInt(stock) || 0,
+      category,
+      condition:   cond,
+      section:     section || 'Normal',
+      is_featured: section === 'Featured Products',
+      discount:    section === 'Flash Deals' ? 10 : 0,
+      description: desc,
+      image_url:   allUrls[0] || '',
+      images:      allUrls,
+      updated_at:  new Date().toISOString()
+    };
+
+    const { error } = await db.from('products').update(updates).eq('id', id);
+    if (error) throw error;
+
+    // Update local array instantly
+    const idx = allProducts.findIndex(p => p.id === id);
+    if (idx !== -1) Object.assign(allProducts[idx], updates);
+
+    updateStats();
+    renderFiltered();
+    closeSheet();
+    showToast('Product updated! ✅', 'success');
+  } catch(e) {
+    showToast('Save failed: ' + e.message, 'error');
+  }
+
+  btn.disabled = false;
+  btn.innerHTML = '<i class="fas fa-check"></i> Save Changes';
+}
+
+// ── HELPERS ──
+function esc(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+let _toastT;
+function showToast(msg, type = 'info') {
+  const t = document.getElementById('toast');
+  const icons = { success:'fa-check-circle', error:'fa-circle-xmark', info:'fa-circle-info' };
+  t.innerHTML = `<i class="fas ${icons[type]||icons.info}"></i> ${msg}`;
+  t.className = `toast show ${type}`;
+  clearTimeout(_toastT);
+  _toastT = setTimeout(() => t.classList.remove('show'), 3000);
+}
+
+// Search wired up
+document.getElementById('searchInput').addEventListener('input', renderFiltered);
+
+// ── INIT ──
+// No verifyAdmin — runs in iframe, parent skeleton handles auth
+load();
+
+// Expose functions called from inline onclick (chips)
+window.setFilter    = setFilter;
+window.closeSheet   = closeSheet;
+window.closeConfirm = closeConfirm;
+window.saveProduct  = saveProduct;
+window.removeImg    = removeImg;
+window.openMenu     = openMenu;
+window.closeMenu    = closeMenu;
+</script>
+</body>
+</html>
