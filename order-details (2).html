@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
+<title>Order Detail — MC Store Admin</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+:root{
+  --blue:#1a56db;--blue-dk:#1347c8;--blue-lt:#eff6ff;--blue-md:#dbeafe;
+  --white:#fff;--bg:#f0f7ff;--text:#0f172a;--muted:#64748b;--border:#e2e8f0;
+  --green:#16a34a;--green-lt:#dcfce7;--red:#dc2626;--red-lt:#fef2f2;
+  --gold:#f59e0b;--gold-lt:#fefce8;--purple:#7c3aed;--purple-lt:#f5f3ff;
+}
+html,body{min-height:100vh;background:var(--bg);font-family:'DM Sans',sans-serif;color:var(--text);-webkit-font-smoothing:antialiased;}
+
+.topbar{position:sticky;top:0;z-index:50;background:var(--white);border-bottom:1.5px solid var(--border);padding:0 1.25rem;height:64px;display:flex;align-items:center;gap:.75rem;box-shadow:0 2px 10px rgba(26,86,219,.06);}
+.back-btn{width:40px;height:40px;border-radius:12px;background:var(--bg);border:1.5px solid var(--border);display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--muted);text-decoration:none;transition:all .2s;}
+.back-btn:hover{color:var(--blue);border-color:var(--blue);background:var(--blue-lt);}
+.topbar-title{font-weight:800;font-size:1.1rem;flex:1;}
+
+.container{padding:1.25rem 1.25rem 6rem;max-width:700px;margin:0 auto;}
+
+/* Sticky Command Bar */
+.command-bar{position:sticky;top:64px;z-index:40;background:linear-gradient(135deg, var(--blue) 0%, var(--blue-dk) 100%);border-radius:0 0 20px 20px;padding:1.5rem;margin-bottom:1.5rem;box-shadow:0 8px 25px rgba(26,86,219,.15);display:flex;flex-direction:column;gap:1rem;}
+.command-bar-title{color:var(--white);font-weight:800;font-size:.85rem;text-transform:uppercase;letter-spacing:.08em;opacity:.9;}
+.command-btns{display:grid;grid-template-columns:1fr 1fr;gap:1rem;}
+
+.card{background:var(--white);border:1.5px solid var(--border);border-radius:22px;padding:1.5rem;margin-bottom:1.25rem;box-shadow:0 4px 15px rgba(26,86,219,.03);}
+.card-title{font-size:.8rem;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:1.25rem;display:flex;align-items:center;gap:10px;}
+.card-title i{color:var(--blue);font-size:.95rem;}
+
+.order-info-header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:1.5rem;}
+.order-id-display{font-family:monospace;font-weight:800;font-size:1.2rem;color:var(--blue);}
+.order-date-display{font-size:.85rem;color:var(--muted);margin-top:2px;}
+.status-badge{padding:7px 14px;border-radius:12px;font-size:.78rem;font-weight:800;}
+.status-pending{background:var(--gold-lt);color:var(--gold);}
+.status-processing{background:var(--blue-lt);color:var(--blue);}
+.status-shipped{background:var(--purple-lt);color:var(--purple);}
+.status-delivered{background:var(--green-lt);color:var(--green);}
+.status-cancelled{background:var(--red-lt);color:var(--red);}
+
+.info-grid{display:grid;grid-template-columns:1fr;gap:1.25rem;}
+.info-item{display:flex;gap:.85rem;}
+.info-icon{width:36px;height:36px;border-radius:10px;background:var(--blue-lt);color:var(--blue);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:1rem;}
+.info-content div:first-child{font-size:.72rem;font-weight:700;color:var(--muted);text-transform:uppercase;margin-bottom:3px;}
+.info-content div:last-child{font-size:.95rem;font-weight:600;}
+
+/* Shipping Info Card */
+.shipping-card{background:var(--white);border:1.5px solid var(--border);border-radius:22px;padding:1.5rem;margin-bottom:1.25rem;box-shadow:0 4px 15px rgba(26,86,219,.03);}
+.courier-badge{display:inline-flex;align-items:center;gap:6px;padding:8px 14px;border-radius:12px;font-weight:800;font-size:.8rem;}
+.courier-exists{background:var(--blue-lt);color:var(--blue);}
+.courier-missing{background:var(--gold-lt);color:var(--gold);border:1.5px solid var(--gold);}
+.courier-legacy{background:var(--red-lt);color:var(--red);border:1.5px solid var(--red);}
+
+.shipping-fee-row{display:flex;justify-content:space-between;align-items:center;margin-top:1rem;padding-top:1rem;border-top:1.5px solid var(--border);}
+.shipping-fee-label{font-size:.8rem;font-weight:700;color:var(--muted);text-transform:uppercase;}
+.shipping-fee-value{font-weight:800;font-size:1.1rem;color:var(--blue-dk);}
+
+/* High-Visibility Tracking Box */
+.tracking-box{background:var(--green-lt);border:2px solid #bbf7d0;border-radius:18px;padding:1.5rem;margin-top:1.25rem;display:flex;justify-content:space-between;align-items:center;gap:1rem;box-shadow:0 8px 20px rgba(22,163,74,0.1);}
+.tracking-content{display:flex;align-items:center;gap:14px;color:var(--green);font-weight:800;font-size:1.1rem;}
+.tracking-content i{font-size:1.6rem;}
+.tracking-id-label{font-size:.7rem;text-transform:uppercase;opacity:.8;margin-bottom:2px;}
+.copy-btn{background:var(--white);color:var(--green);border:2px solid #bbf7d0;padding:10px 18px;border-radius:12px;font-weight:800;font-size:.8rem;cursor:pointer;transition:all .2s;display:flex;align-items:center;gap:6px;}
+.copy-btn:hover{background:var(--green);color:white;border-color:var(--green);}
+.copy-btn:active{transform:scale(0.95);}
+
+.item-list{display:flex;flex-direction:column;gap:1rem;}
+.order-item{display:flex;align-items:center;gap:1rem;}
+.item-img{width:55px;height:55px;border-radius:12px;object-fit:cover;background:var(--bg);border:1px solid var(--border);}
+.item-details{flex:1;}
+.item-name{font-size:.95rem;font-weight:700;}
+.item-meta{font-size:.8rem;color:var(--muted);margin-top:2px;}
+.item-price{font-weight:800;font-size:.95rem;}
+
+.summary-total{display:flex;justify-content:space-between;font-size:1.15rem;font-weight:800;padding-top:1rem;margin-top:1rem;border-top:1.5px dashed var(--border);color:var(--text);}
+.summary-total .price{color:var(--blue);}
+
+/* Action Buttons */
+.btn{height:52px;border-radius:16px;border:none;font-family:inherit;font-weight:800;font-size:.9rem;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:10px;transition:all .2s;padding:0 1.5rem;width:100%;}
+.btn-approve{background:var(--green);color:white;box-shadow:0 4px 0 #15803d;}
+.btn-approve:hover{background:#15a34a;transform:translateY(-2px);box-shadow:0 6px 0 #15803d;}
+.btn-cancel{background:var(--red);color:white;box-shadow:0 4px 0 #991b1b;}
+.btn-cancel:hover{background:#e02828;transform:translateY(-2px);box-shadow:0 6px 0 #991b1b;}
+.btn-book{background:var(--blue);color:white;box-shadow:0 4px 0 var(--blue-dk);}
+.btn-book:hover{background:#1e5edb;transform:translateY(-2px);box-shadow:0 6px 0 var(--blue-dk);}
+.btn:active{transform:translateY(2px);box-shadow:none;}
+.btn:disabled{opacity:.5;cursor:not-allowed;transform:none !important;box-shadow:none !important;}
+
+.loading-overlay{position:fixed;inset:0;background:var(--bg);z-index:200;display:flex;flex-direction:column;align-items:center;justify-content:center;transition:opacity .3s;}
+.spinner{width:45px;height:45px;border:5px solid var(--blue-md);border-top-color:var(--blue);border-radius:50%;animation:spin .8s linear infinite;margin-bottom:1.25rem;}
+
+@keyframes spin{to{transform:rotate(360deg);}}
+
+/* Modal Styles */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);display:none;align-items:center;justify-content:center;z-index:300;padding:1rem;}
+.modal-overlay.show{display:flex;}
+.modal{background:var(--white);border-radius:20px;padding:2rem;max-width:400px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.3);animation:slideUp .3s ease;}
+.modal-title{font-size:1.2rem;font-weight:800;margin-bottom:1rem;color:var(--text);}
+.modal-text{font-size:.95rem;color:var(--muted);margin-bottom:2rem;line-height:1.5;}
+.modal-buttons{display:grid;grid-template-columns:1fr 1fr;gap:1rem;}
+.modal-btn{padding:12px 1.5rem;border-radius:12px;border:none;font-weight:800;font-size:.9rem;cursor:pointer;transition:all .2s;}
+.modal-btn-cancel{background:var(--bg);color:var(--muted);border:1.5px solid var(--border);}
+.modal-btn-cancel:hover{background:var(--border);}
+.modal-btn-confirm{background:var(--red);color:white;}
+.modal-btn-confirm:hover{background:#e02828;}
+
+@keyframes slideUp{from{opacity:0;transform:translateY(20px);}to{opacity:1;transform:none;}}
+
+@media (max-width: 600px) {
+  .command-btns { grid-template-columns: 1fr; }
+  .modal-buttons { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+
+<div id="loading" class="loading-overlay">
+  <div class="spinner"></div>
+  <div style="font-weight:800;color:var(--blue);font-size:1.1rem;">Fetching Order Details...</div>
+</div>
+
+<div class="topbar">
+  <a href="admin-orders.html" class="back-btn"><i class="fas fa-chevron-left"></i></a>
+  <div class="topbar-title">Order Management</div>
+</div>
+
+<div class="container" id="mainContent" style="display:none;">
+  <!-- Command Bar - Sticky Header with Approve & Cancel -->
+  <div class="command-bar" id="commandBar" style="display:none;">
+    <div class="command-bar-title">⚡ Command Center</div>
+    <div class="command-btns">
+      <button id="btnApprove" class="btn btn-approve"><i class="fas fa-check-circle"></i> Approve</button>
+      <button id="btnCancel" class="btn btn-cancel"><i class="fas fa-times-circle"></i> Cancel</button>
+      <button id="btnBook" class="btn btn-book" style="grid-column:1/-1;"><i class="fas fa-rocket"></i> Confirm & Book Shipment</button>
+    </div>
+  </div>
+
+  <!-- Order Info Card -->
+  <div class="card">
+    <div class="order-info-header">
+      <div>
+        <div class="order-id-display" id="orderNumber">...</div>
+        <div class="order-date-display" id="orderDate">...</div>
+      </div>
+      <div id="statusBadge" class="status-badge">Pending</div>
+    </div>
+    
+    <div class="info-grid">
+      <div class="info-item">
+        <div class="info-icon"><i class="fas fa-user"></i></div>
+        <div class="info-content"><div>Customer Name</div><div id="custName">...</div></div>
+      </div>
+      <div class="info-item">
+        <div class="info-icon"><i class="fas fa-phone"></i></div>
+        <div class="info-content"><div>Phone Number</div><div id="custPhone">...</div></div>
+      </div>
+      <div class="info-item">
+        <div class="info-icon"><i class="fas fa-map-marker-alt"></i></div>
+        <div class="info-content"><div>Delivery Address</div><div id="deliveryAddr">...</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Shipping Info Card -->
+  <div class="shipping-card">
+    <div class="card-title"><i class="fas fa-truck-fast"></i> Logistics Info</div>
+    <div id="courierDisplay">
+      <!-- Courier Badge Injected Here -->
+    </div>
+    
+    <div class="shipping-fee-row">
+      <div class="shipping-fee-label">Delivery Fee</div>
+      <div id="shippingFeeDisplay" class="shipping-fee-value">
+        <!-- Fee Injected Here -->
+      </div>
+    </div>
+    
+    <div id="trackingContainer" style="display:none;">
+      <div class="tracking-box">
+        <div class="tracking-content">
+          <i class="fas fa-satellite-dish"></i>
+          <div>
+            <div class="tracking-id-label">Live Tracking ID</div>
+            <span id="trackingIdText">...</span>
+          </div>
+        </div>
+        <button class="copy-btn" id="btnCopy"><i class="fas fa-copy"></i> Copy</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Items Card -->
+  <div class="card">
+    <div class="card-title"><i class="fas fa-box"></i> Items Ordered</div>
+    <div class="item-list" id="itemList"></div>
+    <div class="summary-total">
+      <span>Total Amount</span>
+      <span class="price" id="totalAmount">₦0</span>
+    </div>
+  </div>
+</div>
+
+<!-- Confirmation Modal -->
+<div class="modal-overlay" id="confirmModal">
+  <div class="modal">
+    <div class="modal-title">⚠️ Cancel Order?</div>
+    <div class="modal-text">This action cannot be undone. The order will be permanently marked as cancelled.</div>
+    <div class="modal-buttons">
+      <button class="modal-btn modal-btn-cancel" onclick="closeModal()">Keep Order</button>
+      <button class="modal-btn modal-btn-confirm" onclick="confirmCancel()">Yes, Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- Notification Sound -->
+<audio id="dingSound" src="https://assets.mixkit.co/active_storage/sfx/2568/2568-preview.mp3" preload="auto"></audio>
+
+<script>
+const SB_URL  = "https://kswikkoqfpyxuurzxail.supabase.co";
+const SB_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imtzd2lra29xZnB5eHV1cnp4YWlsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEzNjEzMDQsImV4cCI6MjA4NjkzNzMwNH0.uuoSKWOTeXot1HJys0EO9OcIRBL0mKrNHIUHIAPCpZ4";
+const db = supabase.createClient(SB_URL, SB_ANON);
+
+const urlParams = new URLSearchParams(window.location.search);
+const orderId = urlParams.get('id');
+let currentOrder = null;
+
+async function init() {
+  if (!orderId) { window.location.href = 'admin-orders.html'; return; }
+  try {
+    const { data, error } = await db.from('orders').select('*').eq('id', orderId).single();
+    if (error) throw error;
+    currentOrder = data;
+    renderOrder();
+  } catch (err) { alert('Error loading order: ' + err.message); }
+  finally {
+    document.getElementById('loading').style.display = 'none';
+    document.getElementById('mainContent').style.display = 'block';
+  }
+}
+
+function fmt(n) { return Number(n || 0).toLocaleString('en-NG'); }
+function esc(s) { 
+  if (s === null || s === undefined || s === '') return 'Not Available';
+  const e = document.createElement('div'); 
+  e.textContent = s; 
+  return e.innerHTML; 
+}
+
+function renderOrder() {
+  const o = currentOrder;
+  const status = o.status || 'pending';
+  
+  document.getElementById('orderNumber').innerHTML = esc(o.order_number);
+  document.getElementById('orderDate').textContent = o.created_at ? new Date(o.created_at).toLocaleDateString('en-NG', { day: 'numeric', month: 'long', year: 'numeric' }) : 'Not Available';
+  
+  const statusEl = document.getElementById('statusBadge');
+  statusEl.textContent = status.toUpperCase();
+  statusEl.className = `status-badge status-${status}`;
+
+  document.getElementById('custName').innerHTML = esc(o.customer_name);
+  document.getElementById('custPhone').innerHTML = esc(o.customer_phone);
+  
+  const fullAddr = [o.delivery_street, o.delivery_city].filter(x => x && x.trim()).join(', ');
+  document.getElementById('deliveryAddr').innerHTML = fullAddr ? esc(fullAddr) : 'Pending / Not Available';
+
+  // Items
+  const items = typeof o.items === 'string' ? JSON.parse(o.items) : (o.items || []);
+  document.getElementById('itemList').innerHTML = items.length ? items.map(it => `
+    <div class="order-item">
+      <img src="${it.image || 'https://via.placeholder.com/55'}" class="item-img" onerror="this.src='https://via.placeholder.com/55'"/>
+      <div class="item-details">
+        <div class="item-name">${esc(it.name || it.title)}</div>
+        <div class="item-meta">Qty: ${it.quantity || 1} × ₦${fmt(it.price)}</div>
+      </div>
+      <div class="item-price">₦${fmt((it.price || 0) * (it.quantity || 1))}</div>
+    </div>
+  `).join('') : '<div style="color:var(--muted); font-size:.9rem;">No items found.</div>';
+
+  document.getElementById('totalAmount').textContent = `₦${fmt(o.total)}`;
+
+  // Logistics - Dynamic Courier Badge with Courier ID
+  const courierDiv = document.getElementById('courierDisplay');
+  if (o.shipbubble_courier_name && o.shipbubble_courier_name.trim()) {
+    const courierId = o.shipbubble_courier_id ? ` (ID: ${o.shipbubble_courier_id})` : '';
+    courierDiv.innerHTML = `<span class="courier-badge courier-exists"><i class="fas fa-truck"></i> ${esc(o.shipbubble_courier_name)}${courierId}</span>`;
+  } else if (!o.shipbubble_courier_name && o.created_at && new Date(o.created_at) < new Date('2025-01-01')) {
+    courierDiv.innerHTML = `<span class="courier-badge courier-legacy">⚠️ Customer chose manual/legacy shipping</span>`;
+  } else {
+    courierDiv.innerHTML = `<span class="courier-badge courier-missing">⚠️ Awaiting Courier Selection</span>`;
+  }
+  
+  // Shipping Fee
+  const feeDisplay = document.getElementById('shippingFeeDisplay');
+  if (o.delivery_fee && o.delivery_fee > 0) {
+    feeDisplay.textContent = `₦${fmt(o.delivery_fee)}`;
+  } else {
+    feeDisplay.textContent = 'Pending';
+  }
+
+  // Tracking - Only show if exists
+  const trackingContainer = document.getElementById('trackingContainer');
+  if (o.tracking_id || o.shipbubble_tracking_id) {
+    trackingContainer.style.display = 'block';
+    document.getElementById('trackingIdText').textContent = o.tracking_id || o.shipbubble_tracking_id;
+  } else {
+    trackingContainer.style.display = 'none';
+  }
+
+  // Command Bar - Smart Button Display
+  const cmdBar = document.getElementById('commandBar');
+  const btnApprove = document.getElementById('btnApprove');
+  const btnCancel = document.getElementById('btnCancel');
+  const btnBook = document.getElementById('btnBook');
+  
+  if (status === 'pending') {
+    cmdBar.style.display = 'flex';
+    btnApprove.style.display = 'flex';
+    btnCancel.style.display = 'flex';
+    btnBook.style.display = 'none';
+  } else if (status === 'processing' || status === 'confirmed') {
+    cmdBar.style.display = 'flex';
+    btnApprove.style.display = 'none';
+    btnCancel.style.display = 'flex';
+    btnBook.style.display = 'flex';
+    btnBook.style.gridColumn = '1 / -1';
+  } else if (status === 'shipped') {
+    cmdBar.style.display = 'flex';
+    btnApprove.style.display = 'none';
+    btnCancel.style.display = 'none';
+    btnBook.textContent = '';
+    btnBook.innerHTML = '<i class="fas fa-check-circle"></i> Mark as Delivered';
+    btnBook.style.gridColumn = '1 / -1';
+    btnBook.style.background = 'var(--green)';
+    btnBook.onclick = () => markDelivered();
+    btnBook.style.display = 'flex';
+  } else {
+    cmdBar.style.display = 'none';
+  }
+}
+
+// Modal Functions
+function showModal() {
+  document.getElementById('confirmModal').classList.add('show');
+}
+
+function closeModal() {
+  document.getElementById('confirmModal').classList.remove('show');
+}
+
+async function confirmCancel() {
+  closeModal();
+  const btn = document.getElementById('btnCancel');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Cancelling...';
+  try {
+    const { error } = await db.from('orders').update({ status: 'cancelled' }).eq('id', orderId);
+    if (error) throw error;
+    
+    currentOrder.status = 'cancelled';
+    renderOrder();
+    console.log('✅ Order Cancelled Successfully - Status Updated to: cancelled');
+    alert('✅ Order has been cancelled successfully.');
+  } catch (err) { 
+    console.error('❌ Cancellation Error:', err);
+    alert('❌ Cancellation failed: ' + err.message); 
+    btn.disabled = false; 
+    btn.innerHTML = '<i class="fas fa-times-circle"></i> Cancel'; 
+  }
+}
+
+// Button Event Listeners - APPROVE BUTTON
+document.getElementById('btnApprove').onclick = async () => {
+  const btn = document.getElementById('btnApprove');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Approving...';
+  try {
+    const { error } = await db.from('orders').update({
+      status: 'confirmed',
+      updated_at: new Date().toISOString()
+    }).eq('id', orderId);
+    if (error) throw error;
+    currentOrder.status = 'confirmed';
+    if (window.adminLogAction) window.adminLogAction('confirm_order', `Order ${currentOrder.order_number} confirmed`);
+    document.getElementById('dingSound')?.play().catch(() => {});
+    renderOrder();
+    alert('✅ Order confirmed! Now tap "Confirm & Book Shipment" to dispatch.');
+  } catch (err) {
+    alert('❌ Approval failed: ' + err.message);
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fas fa-check-circle"></i> Approve';
+  }
+};
+
+// CANCEL BUTTON - Shows confirmation modal
+document.getElementById('btnCancel').onclick = () => {
+  showModal();
+};
+
+// BOOK SHIPMENT BUTTON — actually calls Shipbubble
+document.getElementById('btnBook').onclick = async () => {
+  const btn = document.getElementById('btnBook');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Booking with Shipbubble...';
+
+  try {
+    // Step 1: Call Shipbubble via our API
+    const sbRes = await fetch('/api/shipping', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'bookShipment', payload: { order: currentOrder } })
+    });
+    const sbData = await sbRes.json();
+
+    if (!sbData.ok) {
+      alert('❌ Shipbubble error: ' + (sbData.error || 'Could not book shipment.\nCheck your SHIPBUBBLE_SENDER_CODE in Vercel env vars.'));
+      btn.disabled = false;
+      btn.innerHTML = '<i class="fas fa-rocket"></i> Confirm & Book Shipment';
+      return;
+    }
+
+    // Step 2: Save tracking ID and mark as shipped
+    const updates = {
+      status: 'shipped',
+      updated_at: new Date().toISOString()
+    };
+    if (sbData.tracking_id)  updates.shipbubble_tracking_id = sbData.tracking_id;
+    if (sbData.courier_name) updates.shipbubble_courier_name = sbData.courier_name;
+    if (sbData.label_url)    updates.shipbubble_label_url = sbData.label_url;
+
+    const { error } = await db.from('orders').update(updates).eq('id', orderId);
+    if (error) throw error;
+
+    Object.assign(currentOrder, updates);
+
+    // Log the action
+    if (window.adminLogAction) {
+      window.adminLogAction('book_shipment', `Order ${currentOrder.order_number} booked. Tracking: ${sbData.tracking_id || 'N/A'}`);
+    }
+
+    // Play success sound
+    document.getElementById('dingSound')?.play().catch(() => {});
+
+    renderOrder();
+    alert('✅ Shipment booked!\nTracking ID: ' + (sbData.tracking_id || 'N/A') + '\nCourier: ' + (sbData.courier_name || 'N/A'));
+
+  } catch (err) {
+    console.error('❌ Booking Error:', err);
+    alert('❌ Booking failed: ' + err.message);
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fas fa-rocket"></i> Confirm & Book Shipment';
+  }
+};
+
+// COPY TRACKING ID
+document.getElementById('btnCopy').onclick = () => {
+  const tid = document.getElementById('trackingIdText').textContent;
+  navigator.clipboard.writeText(tid).then(() => {
+    const btn = document.getElementById('btnCopy');
+    const old = btn.innerHTML;
+    btn.innerHTML = '<i class="fas fa-check"></i> Copied!';
+    console.log('✅ Tracking ID Copied to Clipboard:', tid);
+    setTimeout(() => btn.innerHTML = old, 2000);
+  }).catch(e => {
+    console.error('❌ Copy failed:', e);
+    alert('Failed to copy: ' + e.message);
+  });
+};
+
+// Close modal when clicking outside
+document.getElementById('confirmModal').addEventListener('click', (e) => {
+  if (e.target.id === 'confirmModal') closeModal();
+});
+
+async function markDelivered() {
+  if (!confirm('Mark this order as delivered?')) return;
+  try {
+    const { error } = await db.from('orders').update({ status: 'delivered', updated_at: new Date().toISOString() }).eq('id', orderId);
+    if (error) throw error;
+    currentOrder.status = 'delivered';
+    if (window.adminLogAction) window.adminLogAction('mark_delivered', `Order ${currentOrder.order_number} delivered`);
+    renderOrder();
+    alert('✅ Order marked as delivered!');
+  } catch(err) { alert('❌ Failed: ' + err.message); }
+}
+
+// Add auth check
+document.addEventListener('DOMContentLoaded', () => {
+  if (window.adminAuth && !window.adminAuth.isAdminLoggedIn()) {
+    window.location.href = 'index.html';
+  }
+});
+
+init();
+</script>
+</body>
+</html>

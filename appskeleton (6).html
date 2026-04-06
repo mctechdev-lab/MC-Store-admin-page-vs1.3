@@ -1,0 +1,555 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
+<title>MC Store Admin</title>
+<link rel="icon" type="image/x-icon" href="/favicon.ico">
+<meta name="theme-color" content="#1a56db">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=Playfair+Display:wght@700;800&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="admin-auth.js"></script>
+<style>
+*,*::before,*::after { box-sizing:border-box; margin:0; padding:0; }
+
+:root {
+  --blue:      #1a56db;
+  --blue-dk:   #1347c8;
+  --blue-lt:   #eff6ff;
+  --blue-md:   #dbeafe;
+  --blue-mid:  #93c5fd;
+  --gold:      #f59e0b;
+  --white:     #ffffff;
+  --bg:        #f0f7ff;
+  --text:      #0f172a;
+  --muted:     #64748b;
+  --border:    #e2e8f0;
+  --green:     #16a34a;
+  --red:       #dc2626;
+  --nav-h:     68px;
+  --sell-size: 60px;
+  --shadow:    0 8px 32px rgba(26,86,219,0.13);
+}
+
+html, body {
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'DM Sans', sans-serif;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+#app-shell {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  min-height: 100dvh;
+  width: 100%;
+}
+
+/* ── CONTENT AREA ── */
+#content-area {
+  flex: 1;
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: calc(var(--nav-h) + env(safe-area-inset-bottom, 0px));
+  min-height: calc(100vh - var(--nav-h));
+}
+
+.section {
+  display: none;
+  flex-direction: column;
+  width: 100%;
+  min-height: calc(100vh - var(--nav-h));
+  animation: fadeIn 0.25s ease forwards;
+}
+.section.active { display: flex; }
+@keyframes fadeIn { from { opacity:0; } to { opacity:1; } }
+
+.section iframe {
+  width: 100%;
+  flex: 1;
+  min-height: calc(100vh - var(--nav-h) - 52px);
+  border: none;
+  background: var(--bg);
+  display: block;
+}
+
+/* ── SECTION HEADER ── */
+.section-header {
+  padding: 14px 18px 12px;
+  background: var(--white);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+  box-shadow: 0 2px 8px rgba(26,86,219,0.06);
+}
+.section-header .hd-icon {
+  width: 32px; height: 32px;
+  border-radius: 10px;
+  background: var(--blue-lt);
+  display: flex; align-items: center; justify-content: center;
+  color: var(--blue);
+  font-size: 14px;
+  flex-shrink: 0;
+}
+.section-header .hd-title {
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: var(--text);
+}
+.section-header .hd-sub {
+  font-size: 0.75rem;
+  color: var(--muted);
+  font-weight: 400;
+  margin-left: 2px;
+}
+
+/* ── BOTTOM NAV ── */
+#bottom-nav {
+  position: sticky;
+  bottom: 0;
+  height: calc(var(--nav-h) + env(safe-area-inset-bottom, 0px));
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  background: var(--white);
+  border-top: 1.5px solid var(--border);
+  box-shadow: 0 -4px 24px rgba(26,86,219,0.10);
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  padding-left: 6px;
+  padding-right: 6px;
+  z-index: 100;
+  flex-shrink: 0;
+}
+
+.nav-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  cursor: pointer;
+  padding: 6px 12px;
+  border-radius: 14px;
+  transition: background 0.2s;
+  position: relative;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+  min-width: 52px;
+}
+.nav-item:hover:not(.sell-btn) { background: var(--blue-lt); }
+
+.nav-item .nav-icon {
+  font-size: 19px;
+  color: var(--muted);
+  transition: color 0.2s, transform 0.22s cubic-bezier(.34,1.56,.64,1);
+}
+.nav-item .nav-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  text-transform: uppercase;
+  transition: color 0.2s;
+}
+
+/* Active state */
+.nav-item.active .nav-icon { color: var(--blue); transform: translateY(-2px); }
+.nav-item.active .nav-label { color: var(--blue); }
+.nav-item.active::after {
+  content: '';
+  position: absolute;
+  bottom: 4px;
+  width: 4px; height: 4px;
+  border-radius: 50%;
+  background: var(--blue);
+  animation: dotPop 0.25s cubic-bezier(.34,1.56,.64,1);
+}
+@keyframes dotPop { from { transform:scale(0); opacity:0; } to { transform:scale(1); opacity:1; } }
+
+/* ── SELL BUTTON (CENTER) ── */
+.nav-item.sell-btn {
+  padding: 0;
+  min-width: 70px;
+  margin-top: -24px;
+  background: none !important;
+}
+.nav-item.sell-btn::after { display: none; }
+
+.sell-inner {
+  width: var(--sell-size);
+  height: var(--sell-size);
+  border-radius: 50%;
+  background: linear-gradient(145deg, #2563eb, var(--blue-dk));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow:
+    0 5px 0 #0f3fa6,
+    0 10px 24px rgba(26,86,219,0.45),
+    inset 0 1px 0 rgba(255,255,255,0.25);
+  transition: transform 0.15s cubic-bezier(.34,1.56,.64,1), box-shadow 0.15s;
+  color: white;
+  font-size: 24px;
+  border: 3px solid white;
+}
+.sell-inner:active,
+.nav-item.sell-btn.menu-open .sell-inner {
+  transform: translateY(4px);
+  box-shadow:
+    0 1px 0 #0f3fa6,
+    0 4px 10px rgba(26,86,219,0.3),
+    inset 0 1px 0 rgba(255,255,255,0.15);
+}
+.sell-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--blue);
+  text-transform: uppercase;
+  margin-top: 5px;
+}
+
+/* ── SELL FLOATING MENU ── */
+#sell-menu {
+  position: fixed;
+  bottom: calc(var(--nav-h) + env(safe-area-inset-bottom, 0px) + 14px);
+  left: 50%;
+  transform: translateX(-50%) translateY(10px) scale(0.92);
+  background: var(--white);
+  border: 1.5px solid var(--border);
+  border-radius: 16px;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 200px;
+  box-shadow: var(--shadow);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s, transform 0.2s cubic-bezier(.34,1.56,.64,1);
+  z-index: 200;
+}
+#sell-menu.open {
+  opacity: 1;
+  pointer-events: all;
+  transform: translateX(-50%) translateY(0) scale(1);
+}
+.sell-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 14px;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: background 0.15s;
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--text);
+  -webkit-tap-highlight-color: transparent;
+}
+.sell-menu-item:hover { background: var(--blue-lt); }
+.sell-menu-item .mi-icon {
+  width: 34px; height: 34px;
+  border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+  font-size: 15px;
+}
+.sell-menu-item:nth-child(1) .mi-icon { background: var(--blue-lt); color: var(--blue); }
+.sell-menu-item:nth-child(2) .mi-icon { background: #fef3c7; color: var(--gold); }
+.sell-menu-arrow {
+  width: 0; height: 0;
+  border-left: 8px solid transparent;
+  border-right: 8px solid transparent;
+  border-top: 8px solid var(--white);
+  position: absolute;
+  bottom: -8px;
+  left: 50%;
+  transform: translateX(-50%);
+  filter: drop-shadow(0 2px 1px rgba(0,0,0,0.08));
+}
+
+#sell-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 150;
+  background: rgba(15,23,42,0.2);
+}
+#sell-overlay.open { display: block; }
+
+/* ── TOAST ── */
+.toast-layer {
+  position: fixed;
+  top: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 9999;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  width: min(380px, 92vw);
+}
+.toast {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  border-radius: 12px;
+  background: var(--white);
+  border: 1.5px solid var(--border);
+  box-shadow: 0 8px 32px rgba(0,0,0,0.12);
+  font-size: 0.85rem;
+  font-weight: 600;
+  pointer-events: all;
+  animation: toastIn 0.3s cubic-bezier(.34,1.56,.64,1) both;
+}
+@keyframes toastIn { from { opacity:0; transform:translateY(-16px) scale(.94); } to { opacity:1; transform:none; } }
+.toast.success { border-color: #bbf7d0; color: var(--green); }
+.toast.error   { border-color: #fecaca; color: var(--red); }
+.toast.info    { border-color: var(--blue-md); color: var(--blue); }
+</style>
+</head>
+<body>
+
+<div id="app-shell">
+
+  <!-- CONTENT AREA -->
+  <div id="content-area">
+
+    <!-- 1. Dashboard -->
+    <div class="section active" data-section="dashboard">
+      <div class="section-header">
+        <div class="hd-icon"><i class="fas fa-chart-pie"></i></div>
+        <div><div class="hd-title">Dashboard</div><div class="hd-sub">Overview & stats</div></div>
+      </div>
+      <iframe src="admin-dashboard.html" title="Dashboard" loading="lazy"></iframe>
+    </div>
+
+    <!-- 1b. Banner Manager -->
+    <div class="section" data-section="banner-manager">
+      <iframe src="banner-manager.html" title="Banner Manager" loading="lazy"></iframe>
+    </div>
+
+    <!-- 2. Orders -->
+    <div class="section" data-section="orders">
+      <div class="section-header">
+        <div class="hd-icon"><i class="fas fa-box"></i></div>
+        <div><div class="hd-title">Orders</div><div class="hd-sub">Confirm & manage orders</div></div>
+      </div>
+      <iframe src="admin-orders.html" title="Orders" loading="lazy"></iframe>
+    </div>
+
+    <!-- 3. Add Product -->
+    <div class="section" data-section="add-product">
+      <div class="section-header">
+        <div class="hd-icon"><i class="fas fa-plus"></i></div>
+        <div><div class="hd-title">Add Product</div><div class="hd-sub">New listing</div></div>
+      </div>
+      <iframe src="add-product.html" title="Add Product" loading="lazy"></iframe>
+    </div>
+
+    <!-- 4. Manage Products -->
+    <div class="section" data-section="product-manager">
+      <div class="section-header">
+        <div class="hd-icon"><i class="fas fa-pen-to-square"></i></div>
+        <div><div class="hd-title">Manage Products</div><div class="hd-sub">Edit & organise</div></div>
+      </div>
+      <iframe src="product-manager.html" title="Manage Products" loading="lazy"></iframe>
+    </div>
+
+    <!-- 5. Users -->
+    <div class="section" data-section="users">
+      <div class="section-header">
+        <div class="hd-icon"><i class="fas fa-users"></i></div>
+        <div><div class="hd-title">Users</div><div class="hd-sub">Customer management</div></div>
+      </div>
+      <iframe src="user-management.html" title="Users" loading="lazy"></iframe>
+    </div>
+
+    <!-- 6. Settings -->
+    <div class="section" data-section="settings">
+      <div class="section-header">
+        <div class="hd-icon"><i class="fas fa-gear"></i></div>
+        <div><div class="hd-title">Settings</div><div class="hd-sub">Admin settings</div></div>
+      </div>
+      <iframe src="admin-settings.html" title="Settings" loading="lazy"></iframe>
+    </div>
+
+    <!-- 7. Shipbubble Setup -->
+    <div class="section" data-section="shipbubble">
+      <div class="section-header">
+        <div class="hd-icon"><i class="fas fa-truck"></i></div>
+        <div><div class="hd-title">Shipbubble Setup</div><div class="hd-sub">Delivery configuration</div></div>
+      </div>
+      <iframe src="shipbubble-setup.html" title="Shipbubble Setup" loading="lazy"></iframe>
+    </div>
+
+  </div>
+
+  <!-- SELL OVERLAY & MENU -->
+  <div id="sell-overlay"></div>
+  <div id="sell-menu">
+    <div class="sell-menu-item" data-target="add-product">
+      <div class="mi-icon"><i class="fas fa-plus"></i></div>
+      Add Product
+    </div>
+    <div class="sell-menu-item" data-target="product-manager">
+      <div class="mi-icon"><i class="fas fa-pen-to-square"></i></div>
+      Manage Products
+    </div>
+    <div class="sell-menu-item" data-target="shipbubble">
+      <div class="mi-icon"><i class="fas fa-truck"></i></div>
+      Shipbubble Setup
+    </div>
+    <div class="sell-menu-arrow"></div>
+  </div>
+
+  <!-- BOTTOM NAV -->
+  <nav id="bottom-nav">
+
+    <div class="nav-item active" data-target="dashboard">
+      <div class="nav-icon"><i class="fas fa-chart-pie"></i></div>
+      <span class="nav-label">Dashboard</span>
+    </div>
+
+    <div class="nav-item" data-target="orders">
+      <div class="nav-icon"><i class="fas fa-box"></i></div>
+      <span class="nav-label">Orders</span>
+    </div>
+
+    <!-- SELL CENTER -->
+    <div class="nav-item sell-btn" id="sell-nav-btn">
+      <div class="sell-inner"><i class="fas fa-plus"></i></div>
+      <span class="sell-label">Sell</span>
+    </div>
+
+    <div class="nav-item" data-target="users">
+      <div class="nav-icon"><i class="fas fa-users"></i></div>
+      <span class="nav-label">Users</span>
+    </div>
+
+    <div class="nav-item" data-target="settings">
+      <div class="nav-icon"><i class="fas fa-gear"></i></div>
+      <span class="nav-label">Settings</span>
+    </div>
+
+  </nav>
+</div>
+
+<div class="toast-layer" id="toastLayer"></div>
+
+<script>
+(async function() {
+  await window.adminAuth.verifyAdmin();
+  window.adminAuth.startSessionRefresh();
+  const user = await window.adminAuth.getAdminUser();
+  if (user) document.title = `MC Store Admin — ${user.name}`;
+})();
+
+function showToast(msg, type = 'info') {
+  const layer = document.getElementById('toastLayer');
+  const t = document.createElement('div');
+  t.className = `toast ${type}`;
+  const icons = { success:'fa-check-circle', error:'fa-circle-xmark', info:'fa-circle-info' };
+  t.innerHTML = `<i class="fas ${icons[type] || icons.info}"></i> ${msg}`;
+  layer.appendChild(t);
+  setTimeout(() => t.remove(), 3500);
+}
+
+window.handleAdminLogout = async function() {
+  if (!confirm('Log out of MC Store Admin?')) return;
+  await window.adminAuth.adminLogout();
+};
+
+(function() {
+  const sections   = document.querySelectorAll('.section');
+  const navItems   = document.querySelectorAll('.nav-item:not(.sell-btn)');
+  const sellBtn    = document.getElementById('sell-nav-btn');
+  const sellMenu   = document.getElementById('sell-menu');
+  const sellOverlay= document.getElementById('sell-overlay');
+  const menuItems  = document.querySelectorAll('.sell-menu-item');
+  let   current    = 'dashboard';
+
+  function activateSection(id) {
+    if (id === current) return;
+    current = id;
+    sections.forEach(s => s.classList.toggle('active', s.dataset.section === id));
+    sessionStorage.setItem('admin_tab', id);
+  }
+
+  function clearNav() {
+    navItems.forEach(n => n.classList.remove('active'));
+  }
+
+  navItems.forEach(item => {
+    item.addEventListener('click', () => {
+      const t = item.dataset.target;
+      if (!t) return;
+      clearNav();
+      item.classList.add('active');
+      closeSellMenu();
+      activateSection(t);
+    });
+  });
+
+  function openSellMenu()  {
+    sellMenu.classList.add('open');
+    sellOverlay.classList.add('open');
+    sellBtn.classList.add('menu-open');
+  }
+  function closeSellMenu() {
+    sellMenu.classList.remove('open');
+    sellOverlay.classList.remove('open');
+    sellBtn.classList.remove('menu-open');
+  }
+
+  sellBtn.addEventListener('click', e => {
+    e.stopPropagation();
+    sellMenu.classList.contains('open') ? closeSellMenu() : openSellMenu();
+  });
+  sellOverlay.addEventListener('click', closeSellMenu);
+
+  menuItems.forEach(item => {
+    item.addEventListener('click', () => {
+      const t = item.dataset.target;
+      if (!t) return;
+      clearNav();
+      closeSellMenu();
+      activateSection(t);
+    });
+  });
+
+  // Listen for iframe postMessages to switch sections
+  window.addEventListener('message', e => {
+    if(e.data?.type === 'switchSection') {
+      const t = e.data.target;
+      clearNav();
+      const navEl = document.querySelector(`.nav-item[data-target="${t}"]`);
+      if(navEl) navEl.classList.add('active');
+      activateSection(t);
+    }
+  });
+
+  // Restore last tab
+  const last = sessionStorage.getItem('admin_tab');
+  if (last && last !== 'dashboard') {
+    const navEl = document.querySelector(`.nav-item[data-target="${last}"]`);
+    clearNav();
+    if (navEl) navEl.classList.add('active');
+    activateSection(last);
+  }
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Settings — MC Store Admin</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="../admin-auth.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+:root{--blue:#1a56db;--blue-lt:#eff6ff;--blue-md:#dbeafe;--white:#fff;--bg:#f0f7ff;--text:#0f172a;--muted:#64748b;--border:#e2e8f0;--green:#16a34a;--green-lt:#dcfce7;--red:#dc2626;--red-lt:#fef2f2;--gold:#f59e0b;--gold-lt:#fefce8;}
+html,body{background:var(--bg);font-family:'DM Sans',sans-serif;color:var(--text);}
+@keyframes spin{to{transform:rotate(360deg);}}
+.page{padding:.85rem .85rem 4rem;}
+.page-title{font-size:1.1rem;font-weight:800;margin-bottom:1.25rem;display:flex;align-items:center;gap:.6rem;}
+.card{background:var(--white);border:1.5px solid var(--border);border-radius:16px;padding:1.25rem;margin-bottom:1rem;box-shadow:0 2px 8px rgba(26,86,219,.05);}
+.card-head{font-size:.78rem;font-weight:800;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin-bottom:1rem;display:flex;align-items:center;gap:.5rem;}
+.info-row{display:flex;justify-content:space-between;align-items:center;padding:.6rem 0;border-bottom:1px solid var(--border);font-size:.85rem;}
+.info-row:last-child{border-bottom:none;}
+.info-label{color:var(--muted);font-weight:600;}
+.info-value{font-weight:700;}
+.btn{background:var(--blue);color:white;border:none;border-radius:10px;padding:.7rem 1.25rem;font-family:'DM Sans',sans-serif;font-size:.85rem;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:.5rem;transition:all .2s;}
+.btn.danger{background:var(--red);}
+.btn:hover{opacity:.9;}
+.log-entry{display:flex;align-items:flex-start;gap:.75rem;padding:.65rem 0;border-bottom:1px solid var(--border);}
+.log-entry:last-child{border-bottom:none;}
+.log-icon{width:30px;height:30px;border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:.75rem;}
+.log-icon.login{background:var(--blue-lt);color:var(--blue);}
+.log-icon.order{background:var(--green-lt);color:var(--green);}
+.log-icon.other{background:var(--gold-lt);color:var(--gold);}
+.log-text{flex:1;font-size:.78rem;color:var(--text);line-height:1.4;}
+.log-time{font-size:.68rem;color:var(--muted);margin-top:2px;}
+.mini-spinner{width:20px;height:20px;border:2.5px solid var(--border);border-top-color:var(--blue);border-radius:50%;animation:spin .8s linear infinite;margin:1rem auto;display:block;}
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="page-title"><i class="fas fa-gear" style="color:var(--blue)"></i> Settings</div>
+
+  <!-- Store Info -->
+  <div class="card">
+    <div class="card-head"><i class="fas fa-store"></i> Store Info</div>
+    <div class="info-row"><span class="info-label">Store Name</span><span class="info-value">MC Store</span></div>
+    <div class="info-row"><span class="info-label">Email</span><span class="info-value">mcstore.care@gmail.com</span></div>
+    <div class="info-row"><span class="info-label">Phone</span><span class="info-value">+234 805 623 0366</span></div>
+    <div class="info-row"><span class="info-label">Location</span><span class="info-value">Bodija, Ibadan, Oyo State</span></div>
+    <div class="info-row"><span class="info-label">Currency</span><span class="info-value">₦ Nigerian Naira</span></div>
+  </div>
+
+  <!-- Admin Account -->
+  <div class="card">
+    <div class="card-head"><i class="fas fa-user-shield"></i> Admin Account</div>
+    <div class="info-row"><span class="info-label">Logged in as</span><span class="info-value" id="adminEmail">—</span></div>
+    <div class="info-row"><span class="info-label">Session</span><span class="info-value" style="color:var(--green)"><i class="fas fa-circle" style="font-size:.5rem"></i> Active (8 hours)</span></div>
+    <div style="margin-top:1rem">
+      <button class="btn danger" onclick="if(confirm('Log out?')) window.adminAuth.adminLogout()">
+        <i class="fas fa-right-from-bracket"></i> Log Out
+      </button>
+    </div>
+  </div>
+
+  <!-- Audit Log -->
+  <div class="card">
+    <div class="card-head"><i class="fas fa-shield-halved"></i> Audit Log <span style="margin-left:auto;font-size:.7rem;font-weight:400;color:var(--muted)">Last 20 actions</span></div>
+    <div id="auditLog"><div class="mini-spinner"></div></div>
+  </div>
+
+  <!-- Links -->
+  <div class="card">
+    <div class="card-head"><i class="fas fa-link"></i> Quick Links</div>
+    <div class="info-row">
+      <span class="info-label">Customer Store</span>
+      <a href="https://mcstore.com.ng" target="_blank" style="color:var(--blue);font-weight:700;font-size:.85rem">mcstore.com.ng <i class="fas fa-external-link"></i></a>
+    </div>
+    <div class="info-row">
+      <span class="info-label">Supabase Dashboard</span>
+      <a href="https://supabase.com/dashboard" target="_blank" style="color:var(--blue);font-weight:700;font-size:.85rem">Open <i class="fas fa-external-link"></i></a>
+    </div>
+    <div class="info-row">
+      <span class="info-label">Shipbubble Dashboard</span>
+      <a href="https://app.shipbubble.com" target="_blank" style="color:var(--blue);font-weight:700;font-size:.85rem">Open <i class="fas fa-external-link"></i></a>
+    </div>
+    <div class="info-row">
+      <span class="info-label">Vercel Dashboard</span>
+      <a href="https://vercel.com/dashboard" target="_blank" style="color:var(--blue);font-weight:700;font-size:.85rem">Open <i class="fas fa-external-link"></i></a>
+    </div>
+  </div>
+
+</div>
+
+<script>
+const SB_URL = "https://kswikkoqfpyxuurzxail.supabase.co";
+const SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imtzd2lra29xZnB5eHV1cnp4YWlsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEzNjEzMDQsImV4cCI6MjA4NjkzNzMwNH0.uuoSKWOTeXot1HJys0EO9OcIRBL0mKrNHIUHIAPCpZ4";
+
+// Show admin email
+const user = window.adminAuth?.getAdminUser?.();
+if (user?.email) document.getElementById('adminEmail').textContent = user.email;
+
+// Load audit log
+async function loadAuditLog() {
+  const el = document.getElementById('auditLog');
+  try {
+    const res = await fetch(`${SB_URL}/rest/v1/admin_audit_log?order=created_at.desc&limit=20`, {
+      headers: { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}` }
+    });
+    const logs = res.ok ? await res.json() : [];
+    if (!logs.length) {
+      el.innerHTML = '<div style="text-align:center;padding:1rem;color:var(--muted);font-size:.82rem">No audit log entries yet</div>';
+      return;
+    }
+    const iconType = a => a.includes('login') ? 'login' : a.includes('order') || a.includes('ship') || a.includes('deliver') ? 'order' : 'other';
+    const iconClass = a => ({ login:'fa-right-to-bracket', order:'fa-box', other:'fa-circle-info' })[iconType(a)] || 'fa-circle-info';
+    el.innerHTML = logs.map(l => `
+      <div class="log-entry">
+        <div class="log-icon ${iconType(l.action)}"><i class="fas ${iconClass(l.action)}"></i></div>
+        <div>
+          <div class="log-text">${l.detail || l.action}</div>
+          <div class="log-time">${new Date(l.created_at).toLocaleString('en-NG')}</div>
+        </div>
+      </div>`).join('');
+  } catch(e) {
+    el.innerHTML = '<div style="color:var(--muted);font-size:.82rem;padding:.5rem">Could not load audit log — run the SQL setup first</div>';
+  }
+}
+
+loadAuditLog();
+</script>
+</body>
+</html>

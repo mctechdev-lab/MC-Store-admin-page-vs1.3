@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
+<title>Orders — MC Store Admin</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+:root{
+  --blue:#1a56db;--blue-dk:#1347c8;--blue-lt:#eff6ff;--blue-md:#dbeafe;
+  --white:#fff;--bg:#f0f7ff;--text:#0f172a;--muted:#64748b;--border:#e2e8f0;
+  --green:#16a34a;--green-lt:#dcfce7;--red:#dc2626;--red-lt:#fef2f2;
+  --gold:#f59e0b;--gold-lt:#fefce8;--purple:#7c3aed;--purple-lt:#f5f3ff;
+}
+html,body{min-height:100vh;background:var(--bg);font-family:'DM Sans',sans-serif;color:var(--text);}
+@keyframes spin{to{transform:rotate(360deg);}}
+@keyframes cardIn{from{opacity:0;transform:translateY(8px);}to{opacity:1;transform:none;}}
+
+.topbar{position:sticky;top:0;z-index:50;background:var(--white);border-bottom:1.5px solid var(--border);padding:0 1.25rem;height:64px;display:flex;align-items:center;gap:.75rem;box-shadow:0 2px 10px rgba(26,86,219,.06);}
+.topbar-title{font-weight:800;font-size:1.1rem;flex:1;}
+.topbar-title span{color:var(--blue);}
+.refresh-btn{width:38px;height:38px;border-radius:12px;background:var(--bg);border:1.5px solid var(--border);display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--muted);transition:all .2s;}
+.refresh-btn:hover{background:var(--blue-lt);color:var(--blue);border-color:var(--blue);}
+.spinning i{animation:spin .7s linear infinite;}
+
+.stats-row{display:grid;grid-template-columns:repeat(4,1fr);gap:.75rem;padding:1rem 1.25rem;}
+.stat-box{background:var(--white);border:1.5px solid var(--border);border-radius:16px;padding:.8rem .5rem;text-align:center;box-shadow:0 2px 6px rgba(0,0,0,0.02);}
+.stat-num{font-size:1.3rem;font-weight:800;}
+.stat-lbl{font-size:.65rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-top:2px;}
+.s-new .stat-num{color:var(--blue);}
+.s-ship .stat-num{color:var(--purple);}
+.s-done .stat-num{color:var(--green);}
+.s-cancel .stat-num{color:var(--red);}
+
+.toolbar{padding:.8rem 1.25rem;display:flex;flex-direction:column;gap:.75rem;background:var(--white);border-bottom:1px solid var(--border);}
+.search-wrap{position:relative;}
+.search-wrap input{width:100%;padding:.75rem 1rem .75rem 2.6rem;background:var(--bg);border:1.5px solid var(--border);border-radius:14px;font-family:'DM Sans',sans-serif;font-size:.9rem;color:var(--text);outline:none;transition:all .2s;}
+.search-wrap input:focus{border-color:var(--blue);background:var(--white);box-shadow:0 0 0 4px var(--blue-lt);}
+.search-icon{position:absolute;left:.95rem;top:50%;transform:translateY(-50%);color:var(--muted);font-size:.9rem;pointer-events:none;}
+.filter-row{display:flex;gap:.5rem;overflow-x:auto;padding-bottom:4px;scrollbar-width:none;}
+.filter-row::-webkit-scrollbar{display:none;}
+.chip{flex-shrink:0;padding:7px 14px;border-radius:22px;font-size:.78rem;font-weight:700;border:1.5px solid var(--border);background:var(--white);color:var(--muted);cursor:pointer;white-space:nowrap;transition:all .15s;}
+.chip.active{background:var(--blue);border-color:var(--blue);color:white;box-shadow:0 4px 10px rgba(26,86,219,0.25);}
+
+.order-list{padding:0 1.25rem 5rem;display:flex;flex-direction:column;gap:.75rem;margin-top:1rem;}
+
+/* Fully Clickable Order Card - Mobile Optimized */
+.order-card{
+  background:var(--white);
+  border:1.5px solid var(--border);
+  border-radius:20px;
+  padding:1.25rem;
+  display:grid;
+  grid-template-columns: 1fr auto;
+  gap:1rem;
+  animation:cardIn .3s ease both;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  cursor:pointer;
+  user-select:none;
+  -webkit-user-select:none;
+  -webkit-tap-highlight-color:transparent;
+}
+.order-card:hover{
+  border-color:var(--blue-md);
+  box-shadow:0 10px 25px rgba(26,86,219,.08);
+  transform: translateY(-2px);
+}
+.order-card:active{
+  transform: scale(0.98);
+}
+
+.card-main{display:flex;flex-direction:column;gap:6px;}
+.order-id{font-family:monospace;font-weight:800;font-size:.85rem;color:var(--blue);}
+.cust-name{font-weight:700;font-size:1.05rem;}
+.courier-info{font-size:.75rem;color:var(--muted);font-weight:600;display:flex;align-items:center;gap:5px;}
+.courier-info i{color:var(--blue-dk);}
+
+.card-right{display:flex;flex-direction:column;align-items:flex-end;justify-content:space-between;}
+.order-total{font-weight:800;font-size:1.1rem;color:var(--text);}
+.badge{display:inline-flex;align-items:center;justify-content:center;padding:5px 12px;border-radius:20px;font-size:.7rem;font-weight:700;white-space:nowrap;width:fit-content;}
+.b-pending{background:var(--gold-lt);color:var(--gold);}
+.b-processing{background:var(--blue-lt);color:var(--blue);}
+.b-shipped{background:var(--purple-lt);color:var(--purple);}
+.b-delivered{background:var(--green-lt);color:var(--green);}
+.b-cancelled{background:var(--red-lt);color:var(--red);}
+
+.empty-state{text-align:center;padding:5rem 2rem;color:var(--muted);}
+.loading-wrap{text-align:center;padding:4rem;}
+.spinner{width:40px;height:40px;border:4px solid var(--border);border-top-color:var(--blue);border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 1.25rem;}
+
+.toast{position:fixed;bottom:2rem;left:50%;transform:translateX(-50%) translateY(100px);background:var(--white);border:1.5px solid var(--border);border-radius:16px;padding:.8rem 1.5rem;font-size:.9rem;font-weight:700;box-shadow:0 12px 40px rgba(0,0,0,.15);display:flex;align-items:center;gap:10px;z-index:999;transition:transform .4s cubic-bezier(.34,1.56,.64,1);white-space:nowrap;max-width:calc(100vw - 3rem);}
+.toast.show{transform:translateX(-50%) translateY(0);}
+
+/* Mobile Optimization for Samsung A7 */
+@media (max-width: 600px) {
+  .order-card{
+    padding:1.5rem;
+    min-height:100px;
+  }
+  .cust-name{
+    font-size:1.1rem;
+  }
+  .order-total{
+    font-size:1.2rem;
+  }
+  .badge{
+    padding:8px 14px;
+    font-size:.75rem;
+  }
+  .stats-row{
+    grid-template-columns:repeat(2,1fr);
+    gap:1rem;
+    padding:1.25rem;
+  }
+  .stat-num{
+    font-size:1.5rem;
+  }
+  .topbar{
+    height:56px;
+  }
+}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-title">MC Store <span>Admin</span></div>
+  <button class="refresh-btn" id="refreshBtn" title="Refresh Orders"><i class="fas fa-sync-alt"></i></button>
+</div>
+
+<div class="stats-row">
+  <div class="stat-box s-new"><div class="stat-num" id="statNew">0</div><div class="stat-lbl">Active</div></div>
+  <div class="stat-box s-ship"><div class="stat-num" id="statShip">0</div><div class="stat-lbl">Shipped</div></div>
+  <div class="stat-box s-done"><div class="stat-num" id="statDone">0</div><div class="stat-lbl">Done</div></div>
+  <div class="stat-box s-cancel"><div class="stat-num" id="statCancel">0</div><div class="stat-lbl">Cancel</div></div>
+</div>
+
+<div class="toolbar">
+  <div class="search-wrap">
+    <i class="fas fa-search search-icon"></i>
+    <input type="text" id="searchInput" placeholder="Search #Order, Name or Phone..."/>
+  </div>
+  <div class="filter-row">
+    <div class="chip active" data-f="all">All Orders</div>
+    <div class="chip" data-f="pending">⏳ Pending</div>
+    <div class="chip" data-f="processing">🔵 Processing</div>
+    <div class="chip" data-f="confirmed">✔️ Confirmed</div>
+    <div class="chip" data-f="shipped">🚚 Shipped</div>
+    <div class="chip" data-f="delivered">✅ Done</div>
+    <div class="chip" data-f="cancelled">❌ Cancelled</div>
+  </div>
+</div>
+
+<div id="orderList" class="order-list">
+  <div class="loading-wrap"><div class="spinner"></div><p style="font-weight:700;color:var(--muted)">Loading your orders...</p></div>
+</div>
+
+<div id="toast" class="toast"></div>
+
+<script>
+const SB_URL  = "https://kswikkoqfpyxuurzxail.supabase.co";
+const SB_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imtzd2lra29xZnB5eHV1cnp4YWlsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEzNjEzMDQsImV4cCI6MjA4NjkzNzMwNH0.uuoSKWOTeXot1HJys0EO9OcIRBL0mKrNHIUHIAPCpZ4";
+const db = supabase.createClient(SB_URL, SB_ANON);
+
+let allOrders = [];
+let currentFilter = 'all';
+
+function toast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 3000);
+}
+
+async function load() {
+  const btn = document.getElementById('refreshBtn');
+  btn.classList.add('spinning');
+  try {
+    const { data, error } = await db.from('orders').select('*').order('created_at', { ascending: false });
+    if (error) throw error;
+    allOrders = data || [];
+    updateStats();
+    renderFiltered();
+  } catch(e) {
+    console.error(e);
+    document.getElementById('orderList').innerHTML = `<div class="empty-state"><h3>Could not load orders</h3><p>${e.message}</p></div>`;
+  }
+  setTimeout(() => btn.classList.remove('spinning'), 600);
+}
+
+let _realtimeChannel = null;
+function subscribeRealtime() {
+  if (_realtimeChannel) { db.removeChannel(_realtimeChannel); }
+  _realtimeChannel = db.channel('orders_updates_' + Date.now())
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, payload => {
+      if (payload.eventType === 'INSERT') {
+        allOrders.unshift(payload.new);
+      } else if (payload.eventType === 'UPDATE') {
+        const idx = allOrders.findIndex(o => o.id === payload.new.id);
+        if (idx !== -1) allOrders[idx] = payload.new;
+        else allOrders.unshift(payload.new);
+      } else if (payload.eventType === 'DELETE') {
+        allOrders = allOrders.filter(o => o.id !== payload.old.id);
+      }
+      updateStats();
+      renderFiltered();
+    })
+    .subscribe();
+}
+subscribeRealtime();
+// Cleanup on page unload
+window.addEventListener('beforeunload', () => {
+  if (_realtimeChannel) db.removeChannel(_realtimeChannel);
+});
+
+function updateStats() {
+  const counts = { pending: 0, processing: 0, shipped: 0, delivered: 0, cancelled: 0 };
+  allOrders.forEach(o => {
+    const s = o.status || 'pending';
+    if (counts.hasOwnProperty(s)) counts[s]++;
+  });
+  document.getElementById('statNew').textContent = counts.pending + counts.processing;
+  document.getElementById('statShip').textContent = counts.shipped;
+  document.getElementById('statDone').textContent = counts.delivered;
+  document.getElementById('statCancel').textContent = counts.cancelled;
+}
+
+function renderFiltered() {
+  const q = (document.getElementById('searchInput').value || '').toLowerCase();
+  let filtered = allOrders.filter(o => {
+    const matchFilter = currentFilter === 'all' || (o.status || 'pending') === currentFilter;
+    const matchSearch = !q || (o.order_number || '').toLowerCase().includes(q) || (o.customer_name || '').toLowerCase().includes(q) || (o.customer_phone || '').toLowerCase().includes(q);
+    return matchFilter && matchSearch;
+  });
+
+  const wrap = document.getElementById('orderList');
+  if (!filtered.length) {
+    wrap.innerHTML = '<div class="empty-state"><h3>No orders found</h3></div>';
+    return;
+  }
+  wrap.innerHTML = filtered.map((o, i) => buildCard(o, i)).join('');
+}
+
+function fmt(n) { return Number(n || 0).toLocaleString('en-NG'); }
+function esc(s) { const e = document.createElement('div'); e.textContent = s; return e.innerHTML; }
+
+function buildCard(o, i) {
+  const status = o.status || 'pending';
+  const courier = o.shipbubble_courier_name || 'Not Available';
+  const orderNum = o.order_number || 'Not Available';
+  const custName = o.customer_name || 'Not Available';
+
+  return `
+  <div class="order-card" onclick="openDetails('${o.id}')" style="animation-delay:${Math.min(i * 0.04, 0.4)}s">
+    <div class="card-main">
+      <div class="order-id">${esc(orderNum)}</div>
+      <div class="cust-name">${esc(custName)}</div>
+      <div class="courier-info"><i class="fas fa-truck"></i> ${esc(courier)}</div>
+    </div>
+    <div class="card-right">
+      <div class="order-total">₦${fmt(o.total)}</div>
+      <span class="badge b-${status}">${status.charAt(0).toUpperCase() + status.slice(1)}</span>
+    </div>
+  </div>`;
+}
+
+function openDetails(id) {
+  const url = `order-details.html?id=${id}`;
+  window.open(url, '_blank');
+}
+
+document.querySelector('.filter-row').addEventListener('click', e => {
+  const chip = e.target.closest('.chip');
+  if (chip) {
+    currentFilter = chip.dataset.f;
+    document.querySelectorAll('.chip').forEach(c => c.classList.toggle('active', c === chip));
+    renderFiltered();
+  }
+});
+
+document.getElementById('searchInput').addEventListener('input', renderFiltered);
+document.getElementById('refreshBtn').addEventListener('click', load);
+
+// Auth guard
+if (window.adminAuth && !window.adminAuth.isAdminLoggedIn()) {
+  window.location.href = 'index.html';
+} else {
+  load();
+}
+</script>
+</body>
+</html>

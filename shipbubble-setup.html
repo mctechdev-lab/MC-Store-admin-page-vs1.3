@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
+<title>Shipbubble Setup — MC Store Admin</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+:root{
+  --blue:#1a56db;--blue-dk:#1347c8;--blue-lt:#eff6ff;--blue-md:#dbeafe;
+  --white:#fff;--bg:#f0f7ff;--text:#0f172a;--muted:#64748b;--border:#e2e8f0;
+  --green:#16a34a;--green-lt:#dcfce7;--red:#dc2626;--red-lt:#fef2f2;
+  --gold:#f59e0b;--gold-lt:#fefce8;
+}
+html,body{background:var(--bg);font-family:'DM Sans',sans-serif;color:var(--text);}
+@keyframes spin{to{transform:rotate(360deg);}}
+.page{padding:.85rem .85rem 4rem;max-width:600px;margin:0 auto;}
+.page-title{font-size:1.1rem;font-weight:800;margin-bottom:1.25rem;display:flex;align-items:center;gap:.6rem;}
+.card{background:var(--white);border:1.5px solid var(--border);border-radius:16px;padding:1.25rem;margin-bottom:1rem;box-shadow:0 2px 8px rgba(26,86,219,.05);}
+.card-head{font-size:.78rem;font-weight:800;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin-bottom:1rem;display:flex;align-items:center;gap:.5rem;}
+.status-ok{background:var(--green-lt);border:1.5px solid #86efac;border-radius:10px;padding:.75rem 1rem;font-size:.83rem;color:var(--green);font-weight:700;display:flex;align-items:center;gap:.5rem;margin-bottom:.75rem;}
+.status-warn{background:var(--gold-lt);border:1.5px solid #fcd34d;border-radius:10px;padding:.85rem 1rem;font-size:.82rem;color:var(--gold);font-weight:600;line-height:1.5;}
+.field{margin-bottom:.75rem;}
+.field label{display:block;font-size:.72rem;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-bottom:.35rem;}
+.field input,.field select{width:100%;border:1.5px solid var(--border);border-radius:8px;padding:.65rem .85rem;font-family:'DM Sans',sans-serif;font-size:.875rem;outline:none;transition:border .2s;color:var(--text);}
+.field input:focus,.field select:focus{border-color:var(--blue);}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:.75rem;}
+.btn{background:var(--blue);color:white;border:none;border-radius:10px;padding:.75rem 1.25rem;font-family:'DM Sans',sans-serif;font-size:.875rem;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:.5rem;transition:all .2s;}
+.btn:hover{background:var(--blue-dk);}
+.btn:disabled{opacity:.6;cursor:not-allowed;}
+.btn.secondary{background:var(--bg);color:var(--text);border:1.5px solid var(--border);}
+.code-box{background:#0f172a;color:#4ade80;border-radius:10px;padding:1rem 1.1rem;font-family:monospace;font-size:.9rem;word-break:break-all;margin:.75rem 0;line-height:1.6;}
+.result{margin-top:.75rem;font-size:.82rem;line-height:1.5;}
+.result.ok{color:var(--green);}
+.result.err{color:var(--red);}
+.divider{border:none;border-top:1px solid var(--border);margin:1rem 0;}
+.rate-card{border:1.5px solid var(--border);border-radius:10px;padding:.75rem 1rem;margin-bottom:.5rem;display:flex;justify-content:space-between;align-items:center;}
+.rate-name{font-size:.85rem;font-weight:700;}
+.rate-eta{font-size:.72rem;color:var(--muted);}
+.rate-fee{font-weight:800;color:var(--blue);font-size:.9rem;}
+.step-num{width:22px;height:22px;border-radius:50%;background:var(--blue);color:white;font-size:.7rem;font-weight:800;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;}
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="page-title"><i class="fas fa-truck" style="color:var(--blue)"></i> Shipbubble Setup</div>
+
+  <!-- Status -->
+  <div class="card">
+    <div class="card-head"><i class="fas fa-satellite-dish"></i> Current Status</div>
+    <div id="senderStatus"><div style="color:var(--muted);font-size:.83rem"><i class="fas fa-spinner fa-spin"></i> Checking...</div></div>
+  </div>
+
+  <!-- Register sender -->
+  <div class="card">
+    <div class="card-head"><span class="step-num">1</span> &nbsp;Register Your Sender Address</div>
+    <p style="font-size:.82rem;color:var(--muted);margin-bottom:1rem;line-height:1.6">
+      Register MC Store's pickup address with Shipbubble. You'll get a code — 
+      copy it to Vercel Environment Variables as <strong>SHIPBUBBLE_SENDER_CODE</strong>.
+    </p>
+    <div class="grid2">
+      <div class="field"><label>Store Name</label><input id="sName" value="MC Store"></div>
+      <div class="field"><label>Phone</label><input id="sPhone" value="08056230366"></div>
+      <div class="field"><label>Email</label><input id="sEmail" value="mcstore.care@gmail.com"></div>
+      <div class="field"><label>City</label><input id="sCity" value="Ibadan"></div>
+    </div>
+    <div class="field"><label>Street Address</label><input id="sAddress" value="Opposite Bovas Filling Station, Bodija"></div>
+    <div class="field">
+      <label>State</label>
+      <select id="sState">
+        <option>Abia</option><option>Adamawa</option><option>Akwa Ibom</option><option>Anambra</option>
+        <option>Bauchi</option><option>Bayelsa</option><option>Benue</option><option>Borno</option>
+        <option>Cross River</option><option>Delta</option><option>Ebonyi</option><option>Edo</option>
+        <option>Ekiti</option><option>Enugu</option><option>FCT</option><option>Gombe</option>
+        <option>Imo</option><option>Jigawa</option><option>Kaduna</option><option>Kano</option>
+        <option>Katsina</option><option>Kebbi</option><option>Kogi</option><option>Kwara</option>
+        <option>Lagos</option><option>Nasarawa</option><option>Niger</option><option>Ogun</option>
+        <option>Ondo</option><option>Osun</option><option selected>Oyo</option><option>Plateau</option>
+        <option>Rivers</option><option>Sokoto</option><option>Taraba</option><option>Yobe</option>
+        <option>Zamfara</option>
+      </select>
+    </div>
+    <button class="btn" onclick="registerSender()" id="regBtn">
+      <i class="fas fa-satellite-dish"></i> Register with Shipbubble
+    </button>
+    <div id="regResult"></div>
+  </div>
+
+  <!-- Step 2 -->
+  <div class="card">
+    <div class="card-head"><span class="step-num">2</span> &nbsp;Add Code to Vercel</div>
+    <ol style="font-size:.83rem;color:var(--muted);line-height:2;padding-left:1.2rem;">
+      <li>Copy the <strong>address code</strong> from Step 1 above</li>
+      <li>Open <strong>Vercel</strong> → Your admin project → <strong>Settings</strong></li>
+      <li>Click <strong>Environment Variables</strong> → <strong>Add New</strong></li>
+      <li>Name: <code style="background:var(--bg);padding:1px 5px;border-radius:4px">SHIPBUBBLE_SENDER_CODE</code></li>
+      <li>Value: paste the code</li>
+      <li>Click <strong>Save</strong> then <strong>Redeploy</strong> the project</li>
+    </ol>
+  </div>
+
+  <!-- Test rates -->
+  <div class="card">
+    <div class="card-head"><span class="step-num">3</span> &nbsp;Test Live Delivery Rates</div>
+    <div class="grid2">
+      <div class="field"><label>Test Street</label><input id="tStreet" value="14 Admiralty Way, Lekki Phase 1"></div>
+      <div class="field"><label>Test City</label><input id="tCity" value="Lagos"></div>
+      <div class="field">
+        <label>Test State</label>
+        <select id="tState">
+          <option>Abia</option><option>Adamawa</option><option>Akwa Ibom</option><option>Anambra</option>
+          <option>Bauchi</option><option>Bayelsa</option><option>Benue</option><option>Borno</option>
+          <option>Cross River</option><option>Delta</option><option>Ebonyi</option><option>Edo</option>
+          <option>Ekiti</option><option>Enugu</option><option>FCT</option><option>Gombe</option>
+          <option>Imo</option><option>Jigawa</option><option>Kaduna</option><option>Kano</option>
+          <option>Katsina</option><option>Kebbi</option><option>Kogi</option><option>Kwara</option>
+          <option selected>Lagos</option><option>Nasarawa</option><option>Niger</option><option>Ogun</option>
+          <option>Ondo</option><option>Osun</option><option>Oyo</option><option>Plateau</option>
+          <option>Rivers</option><option>Sokoto</option><option>Taraba</option><option>Yobe</option>
+          <option>Zamfara</option>
+        </select>
+      </div>
+    </div>
+    <button class="btn secondary" onclick="testRates()" id="testBtn">
+      <i class="fas fa-play"></i> Test Rates
+    </button>
+    <div id="testResult" style="margin-top:.75rem"></div>
+  </div>
+</div>
+
+<script>
+const fmt = n => '₦' + Number(n||0).toLocaleString('en-NG');
+
+async function checkStatus() {
+  const el = document.getElementById('senderStatus');
+  try {
+    const r = await fetch('/api/shipping', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ action:'debug' })
+    });
+    const d = await r.json();
+    const code = d.sender_code_env;
+    if (code && code !== 'NOT SET') {
+      el.innerHTML = `<div class="status-ok"><i class="fas fa-check-circle"></i> Sender address configured · Code: <strong>${code}</strong></div>
+        <div style="font-size:.8rem;color:var(--muted)">Delivery rates are working for customers ✅</div>`;
+    } else {
+      el.innerHTML = `<div class="status-warn"><i class="fas fa-triangle-exclamation"></i> <strong>Sender address not set up yet.</strong><br>
+        Follow Steps 1–2 below to register your address and add the code to Vercel. Until this is done, customers cannot get delivery rates.</div>`;
+    }
+  } catch(e) {
+    el.innerHTML = `<div style="color:var(--red);font-size:.82rem"><i class="fas fa-circle-xmark"></i> Could not check status: ${e.message}</div>`;
+  }
+}
+
+window.registerSender = async function() {
+  const btn = document.getElementById('regBtn');
+  const res = document.getElementById('regResult');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Registering...';
+  res.innerHTML = '';
+  try {
+    const r = await fetch('/api/shipping', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({
+        action:'registerSender',
+        payload:{
+          name:    document.getElementById('sName').value,
+          email:   document.getElementById('sEmail').value,
+          phone:   document.getElementById('sPhone').value,
+          address: document.getElementById('sAddress').value,
+          city:    document.getElementById('sCity').value,
+          state:   document.getElementById('sState').value
+        }
+      })
+    });
+    const d = await r.json();
+    if (d.ok) {
+      res.innerHTML = `
+        <div class="result ok"><i class="fas fa-check-circle"></i> Address registered successfully!</div>
+        <div style="font-size:.8rem;color:var(--muted);margin:.5rem 0">Copy this code and add it to Vercel (Step 2):</div>
+        <div class="code-box">SHIPBUBBLE_SENDER_CODE = ${d.address_code}</div>
+        <div style="font-size:.78rem;color:var(--muted)">After adding it to Vercel, redeploy your admin project.</div>`;
+    } else {
+      res.innerHTML = `<div class="result err"><i class="fas fa-circle-xmark"></i> ${d.error}</div>`;
+    }
+  } catch(e) {
+    res.innerHTML = `<div class="result err">Error: ${e.message}</div>`;
+  }
+  btn.disabled = false;
+  btn.innerHTML = '<i class="fas fa-satellite-dish"></i> Register with Shipbubble';
+};
+
+window.testRates = async function() {
+  const btn = document.getElementById('testBtn');
+  const res = document.getElementById('testResult');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Testing...';
+  try {
+    const r = await fetch('/api/shipping', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({
+        action:'getRates',
+        payload:{
+          recipientAddress:{
+            fullName:'Test Customer', email:'test@mcstore.ng', phone:'08012345678',
+            street: document.getElementById('tStreet').value,
+            city:   document.getElementById('tCity').value,
+            state:  document.getElementById('tState').value
+          },
+          items:[{name:'Test Item',quantity:1,weight:0.5,price:5000}],
+          totalWeight:0.5
+        }
+      })
+    });
+    const d = await r.json();
+    if (d.ok && d.rates?.length) {
+      res.innerHTML = `<div style="color:var(--green);font-weight:700;margin-bottom:.6rem"><i class="fas fa-check-circle"></i> ${d.rates.length} courier(s) available — Shipbubble is working!</div>` +
+        d.rates.map(rate=>`
+          <div class="rate-card">
+            <div><div class="rate-name">${rate.courier_name}</div><div class="rate-eta">${rate.eta}</div></div>
+            <div class="rate-fee">${fmt(rate.delivery_fee)}</div>
+          </div>`).join('');
+    } else {
+      res.innerHTML = `<div class="result err"><i class="fas fa-circle-xmark"></i> ${d.error||'No couriers returned'}</div>`;
+    }
+  } catch(e) {
+    res.innerHTML = `<div class="result err">Error: ${e.message}</div>`;
+  }
+  btn.disabled = false;
+  btn.innerHTML = '<i class="fas fa-play"></i> Test Rates';
+};
+
+checkStatus();
+</script>
+</body>
+</html>

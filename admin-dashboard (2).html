@@ -1,0 +1,566 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
+<title>Dashboard — MC Store Admin</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+:root{
+  --blue:#1a56db;--blue-dk:#1347c8;--blue-lt:#eff6ff;--blue-md:#dbeafe;
+  --white:#fff;--bg:#f0f7ff;--text:#0f172a;--muted:#64748b;--border:#e2e8f0;
+  --green:#16a34a;--green-lt:#dcfce7;--red:#dc2626;--red-lt:#fef2f2;
+  --gold:#f59e0b;--gold-lt:#fefce8;--purple:#7c3aed;--purple-lt:#f5f3ff;
+  --orange:#f97316;--orange-lt:#fff7ed;
+}
+html,body{background:var(--bg);font-family:'DM Sans',sans-serif;color:var(--text);}
+@keyframes spin{to{transform:rotate(360deg);}}
+@keyframes fadeUp{from{opacity:0;transform:translateY(8px);}to{opacity:1;transform:none;}}
+
+/* ── LAYOUT ── */
+.page{padding:.85rem .85rem 5rem;}
+
+/* ── STATS GRID ── */
+.stats-grid{display:grid;grid-template-columns:1fr 1fr;gap:.6rem;margin-bottom:1rem;}
+.stat-card{background:var(--white);border:1.5px solid var(--border);border-radius:16px;padding:.9rem 1rem;animation:fadeUp .3s ease both;position:relative;overflow:hidden;}
+.stat-card::before{content:'';position:absolute;right:-18px;top:-18px;width:70px;height:70px;border-radius:50%;opacity:.08;}
+.sc-rev  ::before{background:var(--gold);}
+.sc-ord  ::before{background:var(--blue);}
+.sc-prod ::before{background:var(--purple);}
+.sc-cust ::before{background:var(--green);}
+.stat-icon{width:36px;height:36px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:.9rem;margin-bottom:.5rem;}
+.sc-rev  .stat-icon{background:var(--gold-lt);color:var(--gold);}
+.sc-ord  .stat-icon{background:var(--blue-lt);color:var(--blue);}
+.sc-prod .stat-icon{background:var(--purple-lt);color:var(--purple);}
+.sc-cust .stat-icon{background:var(--green-lt);color:var(--green);}
+.stat-val{font-size:1.15rem;font-weight:800;line-height:1;margin-bottom:3px;}
+.stat-lbl{font-size:.68rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;}
+.stat-sub{font-size:.7rem;color:var(--muted);margin-top:4px;}
+.stat-sub.up{color:var(--green);}
+.stat-sub.dn{color:var(--red);}
+
+/* ── SECTION CARD ── */
+.card{background:var(--white);border:1.5px solid var(--border);border-radius:16px;margin-bottom:.85rem;overflow:hidden;animation:fadeUp .3s ease both;}
+.card-head{padding:.85rem 1rem;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:.6rem;}
+.card-head-icon{width:30px;height:30px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:.8rem;flex-shrink:0;}
+.card-head h3{font-size:.9rem;font-weight:800;flex:1;}
+.card-head-action{font-size:.75rem;font-weight:700;color:var(--blue);cursor:pointer;border:none;background:none;font-family:'DM Sans',sans-serif;}
+
+/* ── CHART ── */
+.chart-wrap{padding:.85rem 1rem;}
+.chart-tabs{display:flex;gap:.4rem;margin-bottom:.75rem;}
+.ctab{padding:4px 12px;border-radius:20px;font-size:.73rem;font-weight:700;border:1.5px solid var(--border);background:var(--white);color:var(--muted);cursor:pointer;transition:all .15s;}
+.ctab.active{background:var(--blue);border-color:var(--blue);color:white;}
+canvas#salesChart{width:100%!important;max-height:180px;}
+
+/* ── BANNER MANAGER ── */
+.banner-list{padding:.6rem .85rem;}
+.banner-item{display:flex;align-items:center;gap:.7rem;padding:.6rem 0;border-bottom:1px solid var(--border);}
+.banner-item:last-child{border-bottom:none;}
+.banner-thumb{width:52px;height:36px;border-radius:8px;object-fit:cover;flex-shrink:0;background:var(--bg);}
+.banner-thumb-placeholder{width:52px;height:36px;border-radius:8px;background:linear-gradient(135deg,var(--blue),#6366f1);flex-shrink:0;display:flex;align-items:center;justify-content:center;color:white;font-size:.7rem;font-weight:700;}
+.banner-info{flex:1;min-width:0;}
+.banner-title{font-size:.82rem;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.banner-meta{font-size:.68rem;color:var(--muted);margin-top:2px;}
+.banner-actions{display:flex;gap:.35rem;flex-shrink:0;}
+.b-toggle{width:28px;height:28px;border-radius:8px;border:1.5px solid var(--border);background:var(--bg);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:.75rem;transition:all .15s;}
+.b-toggle.on{background:var(--green-lt);border-color:#bbf7d0;color:var(--green);}
+.b-toggle.off{background:var(--red-lt);border-color:#fecaca;color:var(--red);}
+.b-del{width:28px;height:28px;border-radius:8px;border:1.5px solid #fecaca;background:var(--red-lt);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:.75rem;color:var(--red);transition:all .15s;}
+
+/* Add banner form */
+.add-banner-form{padding:.85rem 1rem;border-top:1px solid var(--border);display:none;}
+.add-banner-form.open{display:block;}
+.form-label{font-size:.7rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px;display:block;}
+.form-input{width:100%;padding:.6rem .85rem;background:var(--bg);border:1.5px solid var(--border);border-radius:10px;font-family:'DM Sans',sans-serif;font-size:.85rem;color:var(--text);outline:none;margin-bottom:.6rem;transition:border-color .2s;}
+.form-input:focus{border-color:var(--blue);background:white;}
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:.5rem;}
+.img-upload-area{width:100%;height:80px;border:2px dashed var(--border);border-radius:10px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;cursor:pointer;margin-bottom:.6rem;transition:border-color .2s;background:var(--bg);overflow:hidden;position:relative;}
+.img-upload-area:hover{border-color:var(--blue);background:var(--blue-lt);}
+.img-upload-area input{position:absolute;inset:0;opacity:0;cursor:pointer;}
+.img-upload-area img{width:100%;height:100%;object-fit:cover;border-radius:8px;}
+.img-upload-area span{font-size:.75rem;color:var(--muted);font-weight:600;}
+.img-upload-area i{font-size:1.2rem;color:var(--muted);}
+.save-banner-btn{width:100%;padding:.72rem;background:var(--blue);color:white;border:none;border-radius:12px;font-family:'DM Sans',sans-serif;font-size:.88rem;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;transition:all .15s;box-shadow:0 4px 12px rgba(26,86,219,.3);margin-top:.25rem;}
+.save-banner-btn:active{transform:scale(.97);}
+.save-banner-btn:disabled{opacity:.6;pointer-events:none;}
+
+/* ── PRODUCT PICKER ── */
+.prod-search-wrap{position:relative;margin-bottom:.6rem;}
+.prod-search-wrap i{position:absolute;left:.75rem;top:50%;transform:translateY(-50%);color:var(--muted);font-size:.82rem;pointer-events:none;}
+.prod-search-input{width:100%;padding:.6rem .85rem .6rem 2.2rem;background:var(--bg);border:1.5px solid var(--border);border-radius:10px;font-family:'DM Sans',sans-serif;font-size:.85rem;color:var(--text);outline:none;transition:border-color .2s;}
+.prod-search-input:focus{border-color:var(--blue);background:white;}
+.prod-grid{display:grid;grid-template-columns:1fr 1fr;gap:.45rem;max-height:260px;overflow-y:auto;margin-bottom:.6rem;border:1.5px solid var(--border);border-radius:10px;padding:.45rem;}
+.prod-grid::-webkit-scrollbar{width:3px;}
+.prod-grid::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px;}
+.prod-pick-card{border:1.5px solid var(--border);border-radius:10px;padding:.45rem;cursor:pointer;transition:all .15s;position:relative;background:white;}
+.prod-pick-card:hover{border-color:var(--blue-md);}
+.prod-pick-card.selected{border-color:var(--blue);background:var(--blue-lt);}
+.prod-pick-card.selected::after{content:'✓';position:absolute;top:4px;right:6px;font-size:.7rem;font-weight:800;color:var(--blue);}
+.prod-pick-img{width:100%;aspect-ratio:1;object-fit:cover;border-radius:7px;background:var(--bg);display:block;margin-bottom:.35rem;}
+.prod-pick-placeholder{width:100%;aspect-ratio:1;background:var(--bg);border-radius:7px;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:1.2rem;margin-bottom:.35rem;}
+.prod-pick-name{font-size:.7rem;font-weight:700;line-height:1.2;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;}
+.prod-pick-price{font-size:.68rem;color:var(--blue);font-weight:800;margin-top:2px;}
+.selected-prod-strip{display:none;align-items:center;gap:.6rem;padding:.55rem .75rem;background:var(--blue-lt);border:1.5px solid var(--blue-md);border-radius:10px;margin-bottom:.6rem;}
+.selected-prod-strip.show{display:flex;}
+.selected-prod-strip img{width:36px;height:36px;border-radius:7px;object-fit:cover;}
+.selected-prod-strip .sp-name{font-size:.8rem;font-weight:700;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.selected-prod-strip .sp-clear{color:var(--muted);cursor:pointer;font-size:.8rem;flex-shrink:0;}
+.prod-load-txt{font-size:.78rem;color:var(--muted);text-align:center;padding:.5rem;}
+
+/* ── ORDERS LIST ── */
+.orders-list{padding:.4rem .85rem;}
+.order-row{display:flex;align-items:center;gap:.6rem;padding:.65rem 0;border-bottom:1px solid var(--border);}
+.order-row:last-child{border-bottom:none;}
+.order-num{font-size:.75rem;font-weight:800;color:var(--blue);font-family:monospace;flex:1;}
+.order-name{font-size:.78rem;font-weight:600;flex:2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.order-total{font-size:.82rem;font-weight:800;flex-shrink:0;}
+.order-pill{font-size:.62rem;font-weight:700;padding:2px 8px;border-radius:20px;flex-shrink:0;}
+.op-processing{background:var(--blue-lt);color:var(--blue);}
+.op-shipped   {background:var(--purple-lt);color:var(--purple);}
+.op-delivered {background:var(--green-lt);color:var(--green);}
+.op-cancelled {background:var(--red-lt);color:var(--red);}
+
+/* ── LOW STOCK ── */
+.stock-list{padding:.4rem .85rem;}
+.stock-row{display:flex;align-items:center;gap:.6rem;padding:.6rem 0;border-bottom:1px solid var(--border);}
+.stock-row:last-child{border-bottom:none;}
+.stock-img{width:36px;height:36px;border-radius:8px;object-fit:cover;background:var(--bg);flex-shrink:0;}
+.stock-name{font-size:.8rem;font-weight:600;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.stock-badge{font-size:.68rem;font-weight:800;padding:3px 8px;border-radius:20px;flex-shrink:0;}
+.stock-out {background:var(--red-lt);color:var(--red);}
+.stock-low {background:var(--gold-lt);color:var(--gold);}
+
+/* ── RECENT SIGNUPS ── */
+.signup-list{padding:.4rem .85rem;}
+.signup-row{display:flex;align-items:center;gap:.65rem;padding:.6rem 0;border-bottom:1px solid var(--border);}
+.signup-row:last-child{border-bottom:none;}
+.signup-avatar{width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:.85rem;color:white;flex-shrink:0;}
+.signup-info{flex:1;min-width:0;}
+.signup-name{font-size:.8rem;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.signup-email{font-size:.68rem;color:var(--muted);}
+.signup-time{font-size:.68rem;color:var(--muted);flex-shrink:0;}
+
+/* ── EMPTY / LOADING ── */
+.mini-empty{text-align:center;padding:1.5rem;color:var(--muted);font-size:.82rem;}
+.mini-spinner{width:22px;height:22px;border:2.5px solid var(--border);border-top-color:var(--blue);border-radius:50%;animation:spin .8s linear infinite;margin:1rem auto;}
+
+/* ── TOAST ── */
+.toast{position:fixed;bottom:1.5rem;left:50%;transform:translateX(-50%) translateY(80px);background:var(--white);border:1.5px solid var(--border);border-radius:12px;padding:.65rem 1.2rem;font-size:.83rem;font-weight:600;box-shadow:0 8px 28px rgba(0,0,0,.12);display:flex;align-items:center;gap:7px;z-index:999;transition:transform .3s cubic-bezier(.34,1.56,.64,1);white-space:nowrap;max-width:calc(100vw - 2rem);}
+.toast.show{transform:translateX(-50%) translateY(0);}
+.toast.success{border-color:#bbf7d0;color:var(--green);}
+.toast.error  {border-color:#fecaca;color:var(--red);}
+.toast.info   {border-color:var(--blue-md);color:var(--blue);}
+</style>
+</head>
+<body>
+<div class="page">
+
+  <!-- ── STATS ── -->
+  <div class="stats-grid">
+    <div class="stat-card sc-rev" style="animation-delay:.0s">
+      <div class="stat-icon"><i class="fas fa-naira-sign"></i></div>
+      <div class="stat-val" id="sRev">—</div>
+      <div class="stat-lbl">Total Revenue</div>
+      <div class="stat-sub" id="sRevSub"></div>
+    </div>
+    <div class="stat-card sc-ord" style="animation-delay:.05s">
+      <div class="stat-icon"><i class="fas fa-box"></i></div>
+      <div class="stat-val" id="sOrd">—</div>
+      <div class="stat-lbl">Total Orders</div>
+      <div class="stat-sub" id="sOrdSub"></div>
+    </div>
+    <div class="stat-card sc-prod" style="animation-delay:.1s">
+      <div class="stat-icon"><i class="fas fa-tag"></i></div>
+      <div class="stat-val" id="sProd">—</div>
+      <div class="stat-lbl">Products</div>
+      <div class="stat-sub" id="sProdSub"></div>
+    </div>
+    <div class="stat-card sc-cust" style="animation-delay:.15s">
+      <div class="stat-icon"><i class="fas fa-users"></i></div>
+      <div class="stat-val" id="sCust">—</div>
+      <div class="stat-lbl">Customers</div>
+      <div class="stat-sub" id="sCustSub"></div>
+    </div>
+  </div>
+
+  <!-- ── SALES CHART ── -->
+  <div class="card" style="animation-delay:.2s">
+    <div class="card-head">
+      <div class="card-head-icon" style="background:var(--blue-lt);color:var(--blue)"><i class="fas fa-chart-line"></i></div>
+      <h3>Sales Overview</h3>
+    </div>
+    <div class="chart-wrap">
+      <div class="chart-tabs">
+        <div class="ctab active" data-range="7">7 Days</div>
+        <div class="ctab" data-range="14">14 Days</div>
+        <div class="ctab" data-range="30">30 Days</div>
+      </div>
+      <canvas id="salesChart"></canvas>
+    </div>
+  </div>
+
+  <!-- ── BANNER MANAGER ── -->
+  <div class="card" style="animation-delay:.25s">
+    <div class="card-head">
+      <div class="card-head-icon" style="background:var(--purple-lt);color:var(--purple)"><i class="fas fa-image"></i></div>
+      <h3>Hero Banners</h3>
+      <button class="card-head-action" id="manageBannersBtn"><i class="fas fa-pen-to-square"></i> Manage</button>
+    </div>
+    <div style="display:none" id="addBannerForm">
+    </div>
+
+    <!-- Banner List -->
+    <div class="banner-list" id="bannerList">
+      <div class="mini-spinner"></div>
+    </div>
+  </div>
+
+  <!-- ── RECENT ORDERS ── -->
+  <div class="card" style="animation-delay:.3s">
+    <div class="card-head">
+      <div class="card-head-icon" style="background:var(--blue-lt);color:var(--blue)"><i class="fas fa-receipt"></i></div>
+      <h3>Recent Orders</h3>
+      <button class="card-head-action" onclick="window.parent.postMessage({type:'switchSection',target:'orders'},'*')">View All</button>
+    </div>
+    <div class="orders-list" id="recentOrders">
+      <div class="mini-spinner"></div>
+    </div>
+  </div>
+
+  <!-- ── LOW STOCK ── -->
+  <div class="card" style="animation-delay:.35s">
+    <div class="card-head">
+      <div class="card-head-icon" style="background:var(--gold-lt);color:var(--gold)"><i class="fas fa-triangle-exclamation"></i></div>
+      <h3>Low Stock Alerts</h3>
+      <button class="card-head-action" onclick="window.parent.postMessage({type:'switchSection',target:'product-manager'},'*')">Manage</button>
+    </div>
+    <div class="stock-list" id="lowStockList">
+      <div class="mini-spinner"></div>
+    </div>
+  </div>
+
+  <!-- ── RECENT SIGNUPS ── -->
+  <div class="card" style="animation-delay:.4s">
+    <div class="card-head">
+      <div class="card-head-icon" style="background:var(--green-lt);color:var(--green)"><i class="fas fa-user-plus"></i></div>
+      <h3>Recent Signups</h3>
+      <button class="card-head-action" onclick="window.parent.postMessage({type:'switchSection',target:'users'},'*')">View All</button>
+    </div>
+    <div class="signup-list" id="recentSignups">
+      <div class="mini-spinner"></div>
+    </div>
+  </div>
+
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ══════════════════════════════════════════
+//  SUPABASE
+// ══════════════════════════════════════════
+const { createClient } = supabase;
+const SB_URL  = "https://kswikkoqfpyxuurzxail.supabase.co";
+const SB_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imtzd2lra29xZnB5eHV1cnp4YWlsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEzNjEzMDQsImV4cCI6MjA4NjkzNzMwNH0.uuoSKWOTeXot1HJys0EO9OcIRBL0mKrNHIUHIAPCpZ4";
+const db = createClient(SB_URL, SB_ANON);
+
+// ── HELPERS ──
+const fmt  = n => '₦' + Number(n||0).toLocaleString('en-NG');
+const fmtD = d => d ? new Date(d).toLocaleDateString('en-NG',{day:'2-digit',month:'short'}) : '—';
+const esc  = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+
+let _tt;
+function toast(msg, type='info'){
+  const el=document.getElementById('toast');
+  const icons={success:'fa-check-circle',error:'fa-circle-xmark',info:'fa-circle-info'};
+  el.innerHTML=`<i class="fas ${icons[type]}"></i> ${msg}`;
+  el.className=`toast show ${type}`;
+  clearTimeout(_tt); _tt=setTimeout(()=>el.classList.remove('show'),3200);
+}
+
+function fmtAgo(d){
+  if(!d) return '';
+  const s=Math.floor((Date.now()-new Date(d))/1000);
+  if(s<60) return 'Just now';
+  if(s<3600) return Math.floor(s/60)+'m ago';
+  if(s<86400) return Math.floor(s/3600)+'h ago';
+  return Math.floor(s/86400)+'d ago';
+}
+
+// ══════════════════════════════════════════
+//  STATS
+// ══════════════════════════════════════════
+async function loadStats(){
+  try {
+    const [ordRes, prodRes] = await Promise.all([
+      db.from('orders').select('total,status,created_at'),
+      db.from('products').select('id,stock,is_active')
+    ]);
+
+    const orders   = ordRes.data  || [];
+    const products = prodRes.data || [];
+
+    // Revenue — sum of delivered + processing orders
+    const revenue  = orders.filter(o=>o.status!=='cancelled').reduce((s,o)=>s+Number(o.total||0),0);
+    const today    = orders.filter(o=>new Date(o.created_at)>new Date(Date.now()-86400000));
+    const todayRev = today.reduce((s,o)=>s+Number(o.total||0),0);
+
+    document.getElementById('sRev').textContent = fmt(revenue);
+    document.getElementById('sRevSub').textContent = todayRev>0 ? `+${fmt(todayRev)} today` : 'No sales today';
+    document.getElementById('sRevSub').className = 'stat-sub ' + (todayRev>0?'up':'');
+
+    document.getElementById('sOrd').textContent = orders.length;
+    const pending = orders.filter(o=>o.status==='processing').length;
+    document.getElementById('sOrdSub').textContent = `${pending} pending`;
+    document.getElementById('sOrdSub').className = 'stat-sub ' + (pending>0?'dn':'');
+
+    const active = products.filter(p=>p.is_active!==false).length;
+    document.getElementById('sProd').textContent = products.length;
+    document.getElementById('sProdSub').textContent = `${active} active`;
+    document.getElementById('sProdSub').className = 'stat-sub';
+
+  } catch(e){ console.error('stats error',e); }
+
+  // Customers from Supabase customers table (no Firebase Admin SDK needed)
+  try {
+    const {data:custs} = await db.from('customers').select('uid,created_at');
+    const total = (custs||[]).length;
+    const now   = Date.now(), week = 7*24*60*60*1000;
+    const newU  = (custs||[]).filter(u=>new Date(u.created_at||0)>(now-week)).length;
+    document.getElementById('sCust').textContent = total;
+    document.getElementById('sCustSub').textContent = `+${newU} this week`;
+    document.getElementById('sCustSub').className = 'stat-sub ' + (newU>0?'up':'');
+  } catch(e){ console.warn('customers count:', e); }
+}
+
+// ══════════════════════════════════════════
+//  SALES CHART
+// ══════════════════════════════════════════
+let chartInstance = null;
+
+function buildDays(n){
+  const days=[]; const now=new Date();
+  for(let i=n-1;i>=0;i--){
+    const d=new Date(now); d.setDate(d.getDate()-i);
+    days.push(d.toISOString().slice(0,10));
+  }
+  return days;
+}
+
+async function loadChart(days=7){
+  const labels = buildDays(days);
+  try {
+    const cutoff = new Date(); cutoff.setDate(cutoff.getDate()-days);
+    const {data} = await db.from('orders')
+      .select('total,created_at,status')
+      .gte('created_at', cutoff.toISOString())
+      .neq('status','cancelled');
+
+    const map={};
+    labels.forEach(d=>map[d]=0);
+    ((data)||[]).forEach(o=>{
+      const d=(o.created_at||'').slice(0,10);
+      if(map[d]!==undefined) map[d]+=Number(o.total||0);
+    });
+    const values = labels.map(d=>map[d]||0);
+    // Guard: if all zeros, show empty state instead of broken chart
+    const hasData = values.some(v=>v>0);
+    if(!hasData){
+      document.getElementById('salesChart').closest('.chart-wrap').innerHTML=
+        '<div class="mini-empty" style="padding:2rem">No sales data for this period</div>';
+      return;
+    }
+
+    // Format labels nicely
+    const fmtLabel = d => {
+      const dt=new Date(d+'T00:00:00');
+      return dt.toLocaleDateString('en-NG',{month:'short',day:'numeric'});
+    };
+
+    if(chartInstance) chartInstance.destroy();
+    const ctx = document.getElementById('salesChart').getContext('2d');
+    const grad = ctx.createLinearGradient(0,0,0,180);
+    grad.addColorStop(0,'rgba(26,86,219,0.25)');
+    grad.addColorStop(1,'rgba(26,86,219,0)');
+
+    chartInstance = new Chart(ctx, {
+      type:'line',
+      data:{
+        labels: labels.map(fmtLabel),
+        datasets:[{
+          label:'Revenue',
+          data: values,
+          borderColor:'#1a56db',
+          backgroundColor: grad,
+          borderWidth:2.5,
+          pointRadius:3,
+          pointBackgroundColor:'#1a56db',
+          tension:.4,
+          fill:true
+        }]
+      },
+      options:{
+        responsive:true,
+        maintainAspectRatio:false,
+        plugins:{ legend:{display:false}, tooltip:{
+          callbacks:{ label: ctx => fmt(ctx.parsed.y) }
+        }},
+        scales:{
+          x:{ grid:{display:false}, ticks:{font:{size:10},maxRotation:0,maxTicksLimit:days<=7?7:days<=14?7:10} },
+          y:{ grid:{color:'#f1f5f9'}, ticks:{font:{size:10}, callback:v=>v>=1000?'₦'+(v/1000).toFixed(0)+'k':'₦'+v} }
+        }
+      }
+    });
+  } catch(e){ console.error('chart error',e); }
+}
+
+// Chart tab clicks
+document.querySelector('.chart-tabs').addEventListener('click',e=>{
+  const tab=e.target.closest('.ctab');
+  if(!tab) return;
+  document.querySelectorAll('.ctab').forEach(t=>t.classList.remove('active'));
+  tab.classList.add('active');
+  loadChart(Number(tab.dataset.range));
+});
+
+// ══════════════════════════════════════════
+//  BANNER MANAGER
+// ══════════════════════════════════════════
+let banners = [];
+
+async function loadBanners(){
+  const wrap = document.getElementById('bannerList');
+  try {
+    const {data,error} = await db.from('banners').select('id,title,tag,image_url,gradient,product_ids,is_active').order('sort_order').limit(6);
+    if(error) throw error;
+    banners = data||[];
+    renderBanners();
+  } catch(e){
+    wrap.innerHTML=`<div class="mini-empty">Could not load banners</div>`;
+  }
+}
+
+function renderBanners(){
+  const wrap = document.getElementById('bannerList');
+  if(!banners.length){
+    wrap.innerHTML='<div class="mini-empty">No banners — tap Manage to add one</div>';
+    return;
+  }
+  wrap.innerHTML = banners.map(b=>{
+    const bg = b.image_url
+      ? `url('${esc(b.image_url)}') center/cover`
+      : `linear-gradient(135deg,${b.gradient||'#1a56db,#6366f1'})`;
+    const prods = (b.product_ids||[]).length;
+    return `<div class="banner-item">
+      <div class="banner-thumb-placeholder" style="background:${bg};border-radius:8px;overflow:hidden;">
+        ${b.image_url?`<img src="${esc(b.image_url)}" style="width:100%;height:100%;object-fit:cover">`:``}
+      </div>
+      <div class="banner-info">
+        <div class="banner-title">${esc((b.title||'').replace(/<br>/gi,' '))}</div>
+        <div class="banner-meta">${esc(b.tag||'')} · ${prods} product${prods!==1?'s':''} · ${b.is_active?'<span style="color:var(--green)">Visible</span>':'<span style="color:var(--red)">Hidden</span>'}</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+document.getElementById('manageBannersBtn').addEventListener('click',()=>{
+  window.parent.postMessage({ type:'switchSection', target:'banner-manager' }, '*');
+});
+
+// ══════════════════════════════════════════
+//  RECENT ORDERS
+// ══════════════════════════════════════════
+async function loadRecentOrders(){
+  const wrap=document.getElementById('recentOrders');
+  try {
+    const {data,error}=await db.from('orders').select('order_number,customer_name,total,status,created_at').order('created_at',{ascending:false}).limit(8);
+    if(error) throw error;
+    if(!data||!data.length){ wrap.innerHTML='<div class="mini-empty">No orders yet</div>'; return; }
+    const stCls=s=>({'processing':'op-processing','shipped':'op-shipped','delivered':'op-delivered','cancelled':'op-cancelled'}[s]||'op-processing');
+    wrap.innerHTML=data.map(o=>`
+      <div class="order-row">
+        <div class="order-num">${esc(o.order_number||'—')}</div>
+        <div class="order-name">${esc(o.customer_name||'Customer')}</div>
+        <div class="order-total">${fmt(o.total)}</div>
+        <div class="order-pill ${stCls(o.status)}">${o.status||'—'}</div>
+      </div>`).join('');
+  } catch(e){ wrap.innerHTML='<div class="mini-empty">Could not load orders</div>'; }
+}
+
+// ══════════════════════════════════════════
+//  LOW STOCK
+// ══════════════════════════════════════════
+async function loadLowStock(){
+  const wrap=document.getElementById('lowStockList');
+  try {
+    const {data,error}=await db.from('products').select('id,name,title,image_url,stock').not('stock','is',null).lte('stock',5).order('stock').limit(10);
+    if(error) throw error;
+    if(!data||!data.length){ wrap.innerHTML='<div class="mini-empty" style="color:var(--green)"><i class="fas fa-check-circle"></i> All products well stocked!</div>'; return; }
+    wrap.innerHTML=data.map(p=>{
+      const name=p.name||p.title||'Product';
+      const img=p.image_url||(p.images&&p.images[0])||'';
+      const stock=Number(p.stock||0);
+      return `<div class="stock-row">
+        ${img?`<img class="stock-img" src="${esc(img)}" alt="">`:`<div class="stock-img" style="display:flex;align-items:center;justify-content:center;background:var(--bg)"><i class="fas fa-image" style="color:var(--muted);font-size:.8rem"></i></div>`}
+        <div class="stock-name">${esc(name)}</div>
+        <div class="stock-badge ${stock===0?'stock-out':'stock-low'}">${stock===0?'Out of stock':stock+' left'}</div>
+      </div>`;
+    }).join('');
+  } catch(e){ wrap.innerHTML='<div class="mini-empty">Could not load stock data</div>'; }
+}
+
+// ══════════════════════════════════════════
+//  RECENT SIGNUPS
+// ══════════════════════════════════════════
+async function loadRecentSignups(){
+  const wrap=document.getElementById('recentSignups');
+  try {
+    const {data:users,error}=await db.from('customers')
+      .select('uid,full_name,email,created_at')
+      .order('created_at',{ascending:false}).limit(6);
+    if(error) throw error;
+    if(!users||!users.length){ wrap.innerHTML='<div class="mini-empty">No customers yet</div>'; return; }
+    const colors=['#1a56db','#16a34a','#f59e0b','#7c3aed','#f97316','#dc2626'];
+    wrap.innerHTML=users.map((u,i)=>{
+      const name=u.full_name||u.email||'Customer';
+      const letter=(name[0]||'?').toUpperCase();
+      return `<div class="signup-row">
+        <div class="signup-avatar" style="background:${colors[i%colors.length]}">${letter}</div>
+        <div class="signup-info">
+          <div class="signup-name">${esc(name)}</div>
+          <div class="signup-email">${esc(u.email||'')}</div>
+        </div>
+        <div class="signup-time">${fmtAgo(u.created_at)}</div>
+      </div>`;
+    }).join('');
+  } catch(e){ wrap.innerHTML='<div class="mini-empty">Could not load customers</div>'; }
+}
+
+// ══════════════════════════════════════════
+//  INIT — load everything
+// ══════════════════════════════════════════
+async function init(){
+  await Promise.all([
+    loadStats(),
+    loadChart(7),
+    loadBanners(),
+    loadRecentOrders(),
+    loadLowStock(),
+    loadRecentSignups()
+  ]);
+}
+
+// Auth guard
+if (window.adminAuth && !window.adminAuth.isAdminLoggedIn()) {
+  window.location.href = 'index.html';
+} else {
+  init();
+}
+</script>
+</body>
+</html>
