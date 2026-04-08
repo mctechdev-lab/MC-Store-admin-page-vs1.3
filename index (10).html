@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
+<title>MC Store Admin — Login</title>
+<link rel="icon" type="image/x-icon" href="/favicon.ico">
+<meta name="theme-color" content="#1a56db">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=Playfair+Display:wght@700;800&display=swap" rel="stylesheet">
+<script src="admin-auth.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+:root{
+  --blue:#1a56db;--blue-dk:#1347c8;--blue-lt:#eff6ff;--blue-md:#dbeafe;
+  --gold:#f59e0b;--white:#fff;--bg:#f0f7ff;--text:#0f172a;
+  --muted:#64748b;--border:#e2e8f0;--red:#dc2626;--green:#16a34a;
+}
+html,body{min-height:100vh;background:var(--bg);font-family:'DM Sans',sans-serif;display:flex;align-items:center;justify-content:center;padding:1.5rem;}
+.login-wrap{width:100%;max-width:400px;}
+.logo-area{text-align:center;margin-bottom:2rem;}
+.logo{font-family:'Playfair Display',serif;font-size:2.2rem;font-weight:800;color:var(--text);letter-spacing:-1px;display:flex;align-items:center;justify-content:center;gap:6px;}
+.logo-dot{width:10px;height:10px;border-radius:50%;background:var(--gold);animation:pulse 2s ease-in-out infinite;}
+@keyframes pulse{0%,100%{transform:scale(1);}50%{transform:scale(1.3);}}
+.logo-sub{font-size:.8rem;color:var(--muted);margin-top:6px;font-weight:500;letter-spacing:.1em;text-transform:uppercase;}
+.card{background:var(--white);border:1.5px solid var(--border);border-radius:20px;padding:2.25rem 2rem;box-shadow:0 20px 60px rgba(26,86,219,.10);}
+.sec-badge{display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border-radius:100px;background:var(--blue-lt);border:1px solid var(--blue-md);font-size:.7rem;font-weight:700;color:var(--blue);text-transform:uppercase;letter-spacing:.08em;margin-bottom:1.5rem;}
+.card-title{font-size:1.15rem;font-weight:800;color:var(--text);margin-bottom:.25rem;}
+.card-sub{font-size:.82rem;color:var(--muted);margin-bottom:1.75rem;}
+.field{margin-bottom:1.1rem;}
+.field-label{font-size:.75rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;margin-bottom:6px;display:flex;align-items:center;gap:5px;}
+.input-wrap{position:relative;}
+.input-wrap input{width:100%;padding:.85rem 2.8rem;background:var(--bg);border:1.5px solid var(--border);border-radius:12px;font-family:'DM Sans',sans-serif;font-size:.92rem;font-weight:500;color:var(--text);outline:none;transition:all .2s;}
+.input-wrap input:focus{border-color:var(--blue);background:var(--white);box-shadow:0 0 0 3px rgba(26,86,219,.12);}
+.input-wrap input.error{border-color:var(--red);}
+.input-icon{position:absolute;left:.9rem;top:50%;transform:translateY(-50%);color:var(--muted);font-size:.85rem;pointer-events:none;}
+.pw-toggle{position:absolute;right:.9rem;top:50%;transform:translateY(-50%);color:var(--muted);cursor:pointer;font-size:.85rem;padding:4px;}
+.pw-toggle:hover{color:var(--blue);}
+.global-error{display:none;margin-top:1rem;padding:.75rem 1rem;background:#fef2f2;border:1.5px solid #fecaca;border-radius:10px;font-size:.83rem;font-weight:600;color:var(--red);text-align:center;}
+.global-error.show{display:block;}
+.btn-wrap{margin-top:1.5rem;}
+.btn-login{width:100%;padding:1rem;display:flex;align-items:center;justify-content:center;gap:10px;border:none;border-radius:12px;font-family:'DM Sans',sans-serif;font-size:.95rem;font-weight:800;color:white;cursor:pointer;background:linear-gradient(148deg,#3b82f6,var(--blue),var(--blue-dk));box-shadow:0 4px 0 #0f3fa6,0 8px 20px rgba(26,86,219,.3);transition:all .2s;}
+.btn-login:hover:not(:disabled){transform:translateY(-2px);box-shadow:0 6px 0 #0f3fa6,0 12px 28px rgba(26,86,219,.35);}
+.btn-login:active:not(:disabled){transform:translateY(2px);box-shadow:0 1px 0 #0f3fa6;}
+.btn-login:disabled{cursor:not-allowed;opacity:.6;transform:none;box-shadow:none;}
+.spinner{width:16px;height:16px;border-radius:50%;border:2.5px solid rgba(255,255,255,.3);border-top-color:white;animation:spin .8s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg);}}
+#toast{position:fixed;top:1.5rem;left:50%;transform:translateX(-50%) translateY(-80px);background:var(--white);border:1.5px solid var(--border);border-radius:12px;padding:.75rem 1.25rem;font-size:.85rem;font-weight:600;box-shadow:0 8px 32px rgba(0,0,0,.12);transition:transform .3s cubic-bezier(.34,1.56,.64,1);z-index:9999;display:flex;align-items:center;gap:8px;white-space:nowrap;}
+#toast.show{transform:translateX(-50%) translateY(0);}
+#toast.success{border-color:#bbf7d0;color:var(--green);}
+#toast.error{border-color:#fecaca;color:var(--red);}
+</style>
+</head>
+<body>
+
+<div class="login-wrap">
+  <div class="logo-area">
+    <div class="logo">MC Store <div class="logo-dot"></div></div>
+    <div class="logo-sub">Admin Portal</div>
+  </div>
+
+  <div class="card">
+    <div class="sec-badge"><i class="fas fa-shield-halved"></i> Secure Admin Access</div>
+    <div class="card-title">Welcome back</div>
+    <div class="card-sub">Enter your admin password to continue</div>
+
+    <div class="field">
+      <div class="field-label"><i class="fas fa-lock"></i> Admin Password</div>
+      <div class="input-wrap">
+        <i class="fas fa-lock input-icon"></i>
+        <input type="password" id="passwordInput" placeholder="Enter your admin password" autocomplete="current-password">
+        <span class="pw-toggle" id="pwToggle"><i class="fas fa-eye"></i></span>
+      </div>
+    </div>
+
+    <div class="global-error" id="globalError"></div>
+
+    <div class="btn-wrap">
+      <button class="btn-login" id="loginBtn" onclick="handleLogin()">
+        <i class="fas fa-arrow-right-to-bracket"></i> Sign In to Admin
+      </button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+// Password toggle
+document.getElementById('pwToggle').addEventListener('click', function() {
+  const inp  = document.getElementById('passwordInput');
+  const icon = this.querySelector('i');
+  const show = inp.type === 'password';
+  inp.type        = show ? 'text' : 'password';
+  icon.className  = show ? 'fas fa-eye-slash' : 'fas fa-eye';
+});
+
+// Enter key
+document.getElementById('passwordInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter') handleLogin();
+});
+
+// Show redirect message if any
+const msg = sessionStorage.getItem('adminLoginMsg');
+if (msg) { showToast(msg, 'error'); sessionStorage.removeItem('adminLoginMsg'); }
+
+// Redirect if already logged in
+if (window.adminAuth && window.adminAuth.isAdminLoggedIn()) {
+  window.location.href = 'appskeleton.html';
+}
+
+function showToast(msg, type = 'info') {
+  const t = document.getElementById('toast');
+  t.innerHTML = `<i class="fas fa-${type === 'success' ? 'check-circle' : type === 'error' ? 'circle-xmark' : 'circle-info'}"></i> ${msg}`;
+  t.className = `toast show ${type}`;
+  setTimeout(() => t.classList.remove('show'), 3500);
+}
+
+async function handleLogin() {
+  const password = document.getElementById('passwordInput').value;
+  const btn      = document.getElementById('loginBtn');
+  const errEl    = document.getElementById('globalError');
+
+  errEl.classList.remove('show');
+  document.getElementById('passwordInput').classList.remove('error');
+
+  if (!password) {
+    errEl.textContent = 'Please enter your password.';
+    errEl.classList.add('show');
+    return;
+  }
+
+  btn.disabled = true;
+  btn.innerHTML = '<div class="spinner"></div> Signing in…';
+
+  const result = await window.adminAuth.adminLogin({ password });
+
+  if (result.success) {
+    showToast('Access granted! Loading dashboard…', 'success');
+    setTimeout(() => { window.location.href = 'appskeleton.html'; }, 700);
+  } else {
+    errEl.textContent = result.error || 'Wrong password. Please try again.';
+    errEl.classList.add('show');
+    document.getElementById('passwordInput').classList.add('error');
+    document.getElementById('passwordInput').value = '';
+    document.getElementById('passwordInput').focus();
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fas fa-arrow-right-to-bracket"></i> Sign In to Admin';
+  }
+}
+</script>
+</body>
+</html>
