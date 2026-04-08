@@ -1,285 +1,313 @@
 // ============================================================
-//  api/shipping.js — Vercel Serverless Function (FINAL BULLETPROOF VERSION)
-//  ✅ FIXED: Uses request_token from order data when booking shipments
-//  ✅ FIXED: Auto-fetches rates if request_token is missing
-//  Uses standard 'https' module for maximum compatibility
+//  api/shipping.js — Vercel Serverless Function
+//
+//  CORRECT Shipbubble flow (confirmed from debug):
+//  - fetch_rates requires: sender_address_code, recipient_address_code, category
+//  - Both addresses must be pre-registered in Shipbubble
+//  - Sender code stored in SHIPBUBBLE_SENDER_CODE env var (set via admin panel)
+//  - Recipient address registered on-the-fly per order
+//  - category: "interstate" for cross-state, "intrastate" for same state
 // ============================================================
 
-const https = require('https');
+const SHIPBUBBLE_KEY    = process.env.SHIPBUBBLE_API_KEY    || "sb_prod_4e080eb614d512ca670304775edc1cee9c75df92bf3c06fe82fee00714b44b3a";
+const SHIPBUBBLE_BASE   = "https://api.shipbubble.com/v1";
+const SENDER_STATE      = "Oyo"; // MC Store is in Oyo state
 
-const SHIPBUBBLE_KEY  = process.env.SHIPBUBBLE_KEY;
-const SHIPBUBBLE_HOST = "api.shipbubble.com";
-
-const STORE = {
-  name:    "MC Store",
-  email:   "mcstore.care@gmail.com",
-  phone:   "08056230366",
-  address: "Opposite Bovas Filling Station, Bodija, Ibadan, Oyo State, Nigeria",
-  city:    "Ibadan",
-  state:   "Oyo",
-  country: "NG"
-};
-
-// ── Robust HTTPS Request Helper ──
-function shipbubbleRequest(path, method, body) {
-  return new Promise((resolve, reject) => {
-    const dataString = body ? JSON.stringify(body) : '';
-    
-    const options = {
-      hostname: SHIPBUBBLE_HOST,
-      port: 443,
-      path: `/v1${path}`,
-      method: method,
+// Raw HTTP call
+async function sb(path, body, method = "POST") {
+  const url = `${SHIPBUBBLE_BASE}${path}`;
+  console.log(`[SB] ${method} ${path}`, body ? JSON.stringify(body).slice(0, 400) : "");
+  try {
+    const r = await fetch(url, {
+      method,
       headers: {
-        'Authorization': `Bearer ${SHIPBUBBLE_KEY}`,
-        'Content-Type': 'application/json',
-        'Content-Length': Buffer.byteLength(dataString)
+        Authorization:  `Bearer ${SHIPBUBBLE_KEY}`,
+        "Content-Type": "application/json",
+        Accept:         "application/json"
       },
-      timeout: 15000
-    };
-
-    const req = https.request(options, (res) => {
-      let responseBody = '';
-      res.on('data', (chunk) => { responseBody += chunk; });
-      res.on('end', () => {
-        try {
-          const parsedData = JSON.parse(responseBody);
-          resolve({ ok: res.statusCode >= 200 && res.statusCode < 300, data: parsedData, status: res.statusCode });
-        } catch (e) {
-          resolve({ ok: false, data: { message: 'Invalid JSON response from Shipbubble' }, status: res.statusCode });
-        }
-      });
+      body: method !== "GET" ? JSON.stringify(body) : undefined
     });
+    const raw = await r.text();
+    let data;
+    try { data = JSON.parse(raw); } catch { data = { raw }; }
+    console.log(`[SB] ${path} → ${r.status}`, JSON.stringify(data).slice(0, 500));
+    return { ok: r.ok, status: r.status, data };
+  } catch (e) {
+    return { ok: false, status: 0, data: { message: e.message } };
+  }
+}
 
-    req.on('error', (e) => {
-      reject(new Error(`Network error: ${e.message}`));
-    });
+// Phone → +234XXXXXXXXXX
+function phone(p) {
+  if (!p) return "+2348000000000";
+  const d = String(p).replace(/\D/g, "");
+  if (d.startsWith("234") && d.length >= 13) return "+" + d;
+  if (d.startsWith("0")   && d.length === 11) return "+234" + d.slice(1);
+  if (d.length === 10)                        return "+234" + d;
+  return "+" + d;
+}
 
-    req.on('timeout', () => {
-      req.destroy();
-      reject(new Error('Request timed out'));
-    });
+// State → "Oyo State" format
+function stateStr(s) {
+  if (!s) return "";
+  const t = s.trim();
+  if (t.toLowerCase() === "fct" || t.toLowerCase().includes("abuja")) return "FCT";
+  if (t.toLowerCase().endsWith(" state")) return t;
+  return t + " State";
+}
 
-    if (dataString) req.write(dataString);
-    req.end();
+// Determine shipping category
+function getCategory(recipientState) {
+  const r = (recipientState || "").toLowerCase().replace(" state","").trim();
+  const s = SENDER_STATE.toLowerCase();
+  return r === s ? "intrastate" : "interstate";
+}
+
+// Register an address with Shipbubble → returns address_code
+async function registerAddress(details) {
+  const r = await sb("/shipping/address", {
+    name:    details.name    || "Customer",
+    email:   details.email   || "customer@mcstore.ng",
+    phone:   phone(details.phone),
+    address: details.address || "",
+    city:    details.city    || "",
+    state:   stateStr(details.state),
+    country: "NG"
   });
+  const d    = r.data?.data || r.data || {};
+  const code = d.address_code || d.code || d.id || null;
+  console.log("[SB] registerAddress code:", code, "status:", r.status);
+  return { ok: r.ok && !!code, code: code ? String(code) : null, raw: r };
+}
+
+// Build package items
+function buildItems(items) {
+  return (items || []).map(i => ({
+    name:        String(i.name || "Item"),
+    description: String(i.name || "Item"),
+    unit_weight: String(Number(i.weight)   || 0.3),
+    unit_amount: String(Math.round((Number(i.price) || 1000) * 100)),
+    quantity:    String(Number(i.quantity) || 1)
+  }));
 }
 
 // ── MAIN HANDLER ──
-module.exports = async (req, res) => {
-  // CORS Headers
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS, GET');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-  
-  if (req.method === 'OPTIONS') return res.status(200).end();
-  
+export default async function handler(req, res) {
+  res.setHeader("Access-Control-Allow-Origin",  "*");
+  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  if (req.method === "OPTIONS") return res.status(200).end();
+  if (req.method !== "POST")   return res.status(405).json({ ok: false, error: "Method not allowed" });
+
   const { action, payload = {} } = req.body || {};
 
-  try {
-    // ── GET WALLET BALANCE ──
-    if (action === 'getWallet') {
-      const { ok, data } = await shipbubbleRequest('/shipping/wallet/balance', 'GET');
-      if (!ok) return res.status(200).json({ ok: false, error: data.message || 'Could not fetch wallet' });
-      
-      let balance = data?.data?.balance ?? data?.balance ?? null;
-      if (balance === null) return res.status(200).json({ ok: false, error: 'Balance not found in response' });
-      
-      return res.status(200).json({ ok: true, balance: Number(balance) });
-    }
+  // ══════════════════════════════════════════════════
+  //  GET RATES
+  //  1. Get sender_address_code from env var (set in admin)
+  //  2. Register recipient address → get recipient_address_code
+  //  3. Call fetch_rates with both codes + category
+  // ══════════════════════════════════════════════════
+  if (action === "getRates") {
+    const { recipientAddress, items = [], totalWeight = 0.5 } = payload;
 
-    // ── GET RATES (called by customer during checkout) ──
-    if (action === 'getRates') {
-      const { recipientAddress, items = [], totalWeight = 0.5 } = payload;
-      
-      const rateBody = {
-        sender: STORE,
-        recipient: {
-          name: recipientAddress.fullName || 'Customer',
-          email: recipientAddress.email || '',
-          phone: recipientAddress.phone || '',
-          address: recipientAddress.street || '',
-          city: recipientAddress.city || '',
-          state: recipientAddress.state || '',
-          country: 'NG'
-        },
-        package: {
-          weight: totalWeight || 0.5,
-          length: 20, width: 15, height: 10,
-          items: items.map(i => ({
-            name: i.name || 'Item',
-            quantity: i.quantity || 1,
-            weight: i.weight || 0.3
-          }))
-        }
-      };
-
-      const { ok, data } = await shipbubbleRequest('/shipping/fetch_rates', 'POST', rateBody);
-      
-      const rawRates = ok ? (data.data || data.rates || []) : [];
-      
-      if (!rawRates.length) {
-        // Fallback to flat rates
-        return res.status(200).json({
-          ok: true,
-          rates: flatRates(recipientAddress.state),
-          source: 'fallback'
-        });
-      }
-
-      // ✅ FIXED: Include request_token in the rates response so customer can save it
-      const rates = rawRates.map(r => ({
-        courier_id: r.courier_id || r.id || '',
-        courier_name: r.courier_name || r.name || 'Courier',
-        service_code: r.service_code || r.code || '',
-        delivery_fee: Number(r.total || r.fee || r.amount || 0),
-        eta: r.estimated_days ? `${r.estimated_days} business day(s)` : '2-5 business days',
-        request_token: data.data?.request_token || data.request_token || '', // ✅ Include request_token!
-        logo: r.courier_logo || r.logo || ''
-      }));
-
-      return res.status(200).json({ ok: true, rates, source: 'shipbubble' });
-    }
-
-    // ── BOOK SHIPMENT (called by admin when confirming order) ──
-    if (action === 'bookShipment') {
-      const { order } = payload;
-      if (!order) return res.status(400).json({ ok: false, error: 'Order data missing' });
-
-      const items = (() => {
-        try { return typeof order.items === 'string' ? JSON.parse(order.items) : (order.items || []); }
-        catch { return []; }
-      })();
-
-      const isCOD = order.payment_method === 'cash_on_delivery';
-      
-      // ✅ FIXED: Extract request_token from order (saved during checkout)
-      let requestToken = order.shipbubble_request_token || order.request_token;
-      let serviceCode = order.shipbubble_service_code || order.service_code;
-      let courierId = order.shipbubble_courier_id || order.courier_id;
-
-      // If request_token is missing, auto-fetch rates
-      if (!requestToken) {
-        console.log("[shipping.js] No request_token found. Auto-fetching rates...");
-        
-        const rateBody = {
-          sender: STORE,
-          recipient: {
-            name: order.customer_name || 'Customer',
-            email: order.customer_email || 'no-email@provided.com',
-            phone: order.customer_phone || '',
-            address: order.delivery_street || '',
-            city: order.delivery_city || '',
-            state: order.delivery_state || '',
-            country: 'NG'
-          },
-          package: {
-            weight: Math.max(0.5, items.reduce((s, i) => s + ((i.quantity || 1) * (i.weight || 0.3)), 0)),
-            length: 20, width: 15, height: 10,
-            items: items.map(i => ({
-              name: i.name || 'Item',
-              quantity: i.quantity || 1,
-              weight: i.weight || 0.3
-            }))
-          }
-        };
-
-        const rateRes = await shipbubbleRequest('/shipping/fetch_rates', 'POST', rateBody);
-        
-        if (!rateRes.ok) {
-          return res.status(200).json({ ok: false, error: "Failed to auto-fetch rates: " + (rateRes.data.message || 'Requested resource not available') });
-        }
-
-        requestToken = rateRes.data?.data?.request_token;
-        const rates = rateRes.data?.data?.rates || rateRes.data?.data?.couriers || [];
-        
-        if (!requestToken || rates.length === 0) {
-          return res.status(200).json({ ok: false, error: "No shipping rates available for this address" });
-        }
-
-        // Auto-select first rate if none was provided
-        if (!serviceCode) {
-          serviceCode = rates[0].service_code;
-          courierId = rates[0].courier_id;
-          console.log(`[shipping.js] Auto-selected rate: ${rates[0].courier_name}`);
-        }
-      }
-
-      // Build shipment request
-      const shipmentBody = {
-        sender: STORE,
-        recipient: {
-          name: order.customer_name || 'Customer',
-          email: order.customer_email || 'no-email@provided.com',
-          phone: order.customer_phone || '',
-          address: order.delivery_street || '',
-          city: order.delivery_city || '',
-          state: order.delivery_state || '',
-          country: 'NG'
-        },
-        package: {
-          weight: Math.max(0.5, items.reduce((s, i) => s + ((i.quantity || 1) * (i.weight || 0.3)), 0)),
-          length: 20, width: 15, height: 10,
-          items: items.map(i => ({
-            name: i.name || 'Item',
-            quantity: i.quantity || 1,
-            weight: i.weight || 0.3
-          }))
-        },
-        payment_type: isCOD ? 'COD' : 'prepaid',
-        ...(isCOD ? { cod_amount: Number(order.total || 0) } : {}),
-        service_code: serviceCode,
-        courier_id: courierId,
-        request_token: requestToken,
-        is_cod_label: isCOD
-      };
-
-      const { ok, data, status } = await shipbubbleRequest('/shipping/labels', 'POST', shipmentBody);
-
-      if (!ok) {
-        let errorMsg = data?.message || data?.error || 'Shipbubble API Error';
-        if (data?.errors) errorMsg += ": " + JSON.stringify(data.errors);
-        return res.status(200).json({ ok: false, error: errorMsg });
-      }
-
-      const shipmentData = data?.data || data;
+    // Step 1: Sender code — must be set in Vercel env vars via admin panel
+    const senderCode = process.env.SHIPBUBBLE_SENDER_CODE || "";
+    if (!senderCode) {
       return res.status(200).json({
-        ok: true,
-        tracking_id: shipmentData.tracking_id || shipmentData.id,
-        courier_name: shipmentData.courier_name || 'Courier',
-        label_url: shipmentData.label_url || shipmentData.waybill_url || ''
+        ok:    false,
+        error: "Delivery not yet configured. The store admin needs to set up the sender address. Please contact MC Store support.",
+        setup_needed: true
       });
     }
 
-    return res.status(400).json({ ok: false, error: `Unknown action: ${action}` });
-  } catch(e) {
-    console.error('[api/shipping] Fatal Error:', e.message);
-    return res.status(500).json({ ok: false, error: 'Internal Server Error: ' + e.message });
-  }
-};
+    // Step 2: Register recipient address
+    const recipReg = await registerAddress({
+      name:    recipientAddress.fullName || "Customer",
+      email:   recipientAddress.email    || "customer@mcstore.ng",
+      phone:   recipientAddress.phone,
+      address: recipientAddress.street   || "",
+      city:    recipientAddress.city     || "",
+      state:   recipientAddress.state    || ""
+    });
 
-// ── FLAT RATE FALLBACK ──
-function flatRates(state = '') {
-  const s = (state || '').toLowerCase();
-  if (s.includes('oyo'))
-    return [
-      { courier_id:'local-express', courier_name:'Express Delivery', service_code:'express', delivery_fee:1500, eta:'Same day / Next day', request_token: null },
-      { courier_id:'local-standard', courier_name:'Standard Delivery', service_code:'standard', delivery_fee:800, eta:'1-2 business days', request_token: null }
-    ];
-  if (s.includes('lagos'))
-    return [
-      { courier_id:'lagos-express', courier_name:'Express Delivery', service_code:'express', delivery_fee:3500, eta:'1-2 business days', request_token: null },
-      { courier_id:'lagos-standard', courier_name:'Standard Delivery', service_code:'standard', delivery_fee:2000, eta:'2-3 business days', request_token: null }
-    ];
-  if (s.includes('abuja') || s.includes('fct'))
-    return [
-      { courier_id:'abuja-express', courier_name:'Express Delivery', service_code:'express', delivery_fee:4000, eta:'2-3 business days', request_token: null },
-      { courier_id:'abuja-standard', courier_name:'Standard Delivery', service_code:'standard', delivery_fee:2500, eta:'3-5 business days', request_token: null }
-    ];
-  // Default for rest of Nigeria
-  return [
-    { courier_id:'ng-express', courier_name:'Express Delivery', service_code:'express', delivery_fee:5500, eta:'3-5 business days', request_token: null },
-    { courier_id:'ng-standard', courier_name:'Standard Delivery', service_code:'standard', delivery_fee:3500, eta:'5-7 business days', request_token: null }
-  ];
-          }
-                                     
+    if (!recipReg.ok || !recipReg.code) {
+      const msg = recipReg.raw?.data?.message || recipReg.raw?.data?.errors?.[0] || "Could not validate your address";
+      return res.status(200).json({
+        ok:    false,
+        error: `Address error: ${msg}. Please check your street, city and state are correct.`
+      });
+    }
+
+    // Step 3: Fetch rates
+    const category = getCategory(recipientAddress.state);
+    const weight   = Math.max(0.5, Number(totalWeight) || 0.5);
+
+    const rateRes = await sb("/shipping/fetch_rates", {
+      sender_address_code:    senderCode,
+      recipient_address_code: recipReg.code,
+      package_category:       category,
+      package: {
+        weight: String(weight),
+        length: "20",
+        width:  "15",
+        height: "10",
+        items:  buildItems(items)
+      }
+    });
+
+    const couriers     = rateRes.data?.data?.couriers || rateRes.data?.data?.rates || rateRes.data?.rates || [];
+    const requestToken = rateRes.data?.data?.request_token || "";
+
+    if (!rateRes.ok || !couriers.length) {
+      const msg = rateRes.data?.message || rateRes.data?.data?.message || rateRes.data?.errors?.[0] || "No couriers available";
+      return res.status(200).json({ ok: false, error: `Shipbubble: ${msg}` });
+    }
+
+    const rates = couriers.map(r => ({
+      courier_id:             r.courier_id    || "",
+      courier_name:           r.courier_name  || "Courier",
+      service_code:           r.service_code  || "",
+      delivery_fee:           Number(r.total  || r.rate_card_amount || r.fee || 0),
+      eta:                    r.delivery_eta  || r.estimated_days ? `${r.estimated_days} day(s)` : "2–5 days",
+      logo:                   r.courier_image || r.courier_logo || "",
+      request_token:          requestToken,
+      recipient_address_code: recipReg.code,
+      is_cod:                 r.is_cod_available || false
+    }));
+
+    return res.status(200).json({ ok: true, rates, request_token: requestToken });
+  }
+
+  // ══════════════════════════════════════════════════
+  //  REGISTER SENDER ADDRESS (called from admin panel)
+  //  Admin enters their address, we register it with
+  //  Shipbubble and return the code to save in Vercel
+  // ══════════════════════════════════════════════════
+  if (action === "registerSender") {
+    const { name, email, phone: p, address, city, state } = payload;
+    if (!address || !city || !state) {
+      return res.status(200).json({ ok: false, error: "Address, city and state are required" });
+    }
+    const r = await registerAddress({ name, email, phone: p, address, city, state });
+    if (!r.ok) {
+      const msg = r.raw?.data?.message || r.raw?.data?.errors?.[0] || "Could not register address";
+      return res.status(200).json({ ok: false, error: msg, raw: r.raw?.data });
+    }
+    return res.status(200).json({
+      ok:           true,
+      address_code: r.code,
+      message:      `Sender registered! Save this code in Vercel: SHIPBUBBLE_SENDER_CODE = ${r.code}`
+    });
+  }
+
+  // ══════════════════════════════════════════════════
+  //  BOOK SHIPMENT (admin confirms order)
+  // ══════════════════════════════════════════════════
+  if (action === "bookShipment") {
+    const { order } = payload;
+    if (!order) return res.status(400).json({ ok: false, error: "No order provided" });
+
+    const senderCode = process.env.SHIPBUBBLE_SENDER_CODE || "";
+    if (!senderCode) return res.status(200).json({ ok: false, error: "SHIPBUBBLE_SENDER_CODE not set in Vercel env vars" });
+
+    const items = (() => {
+      try { return typeof order.items === "string" ? JSON.parse(order.items) : (order.items || []); }
+      catch { return []; }
+    })();
+
+    const weight = Math.max(0.5, items.reduce((s, i) => s + ((i.quantity || 1) * 0.3), 0));
+    const isCOD  = order.payment_method === "cash_on_delivery";
+
+    // Use saved recipient code or re-register
+    let recipCode = order.shipbubble_recipient_code || "";
+    if (!recipCode) {
+      const reg = await registerAddress({
+        name:    order.customer_name,
+        email:   order.customer_email,
+        phone:   order.customer_phone,
+        address: order.delivery_street,
+        city:    order.delivery_city,
+        state:   order.delivery_state
+      });
+      if (!reg.ok) return res.status(200).json({ ok: false, error: "Could not register recipient address for booking" });
+      recipCode = reg.code;
+    }
+
+    const category = getCategory(order.delivery_state);
+    let   requestToken = order.shipbubble_request_token || "";
+
+    if (!requestToken) {
+      const rr = await sb("/shipping/fetch_rates", {
+        sender_address_code:    senderCode,
+        recipient_address_code: recipCode,
+        package_category:       category,
+        package: {
+          weight: String(weight), length: "20", width: "15", height: "10",
+          items:  buildItems(items)
+        }
+      });
+      requestToken = rr.data?.data?.request_token || "";
+      if (!requestToken) return res.status(200).json({ ok: false, error: "Could not get booking token from Shipbubble" });
+    }
+
+    const { ok, data } = await sb("/shipping/labels", {
+      sender_address_code:    senderCode,
+      recipient_address_code: recipCode,
+      package_category:       category,
+      package: {
+        weight: String(weight), length: "20", width: "15", height: "10",
+        items:  buildItems(items)
+      },
+      payment_type:  isCOD ? "COD" : "prepaid",
+      ...(isCOD ? { cod_amount: Number(order.total || 0) } : {}),
+      service_code:  order.shipbubble_service_code || "",
+      courier_id:    order.shipbubble_courier_id   || "",
+      request_token: requestToken
+    });
+
+    if (!ok || !data?.data) {
+      return res.status(200).json({ ok: false, error: data?.message || "Shipbubble could not create shipment" });
+    }
+    const s = data.data;
+    return res.status(200).json({
+      ok:           true,
+      tracking_id:  s.tracking_id  || s.id         || "",
+      courier_name: s.courier_name || s.courier     || "",
+      label_url:    s.label_url    || s.waybill_url || ""
+    });
+  }
+
+  // ══════════════════════════════════════════════════
+  //  DEBUG
+  // ══════════════════════════════════════════════════
+  if (action === "debug") {
+    const senderCode = process.env.SHIPBUBBLE_SENDER_CODE || "NOT SET";
+    const regTest    = await registerAddress({
+      name: "Test Customer", email: "test@mcstore.ng", phone: "08012345678",
+      address: "14 Admiralty Way, Lekki Phase 1", city: "Lagos", state: "Lagos"
+    });
+
+    let rateTest = { skipped: "recipient registration failed" };
+    if (regTest.ok && regTest.code) {
+      const r = await sb("/shipping/fetch_rates", {
+        sender_address_code:    senderCode !== "NOT SET" ? senderCode : "MISSING",
+        recipient_address_code: regTest.code,
+        package_category:       "interstate",
+        package: {
+          weight: "1", length: "20", width: "15", height: "10",
+          items: [{ name: "Test", description: "Test", unit_weight: "0.5", unit_amount: "500000", quantity: "1" }]
+        }
+      });
+      rateTest = { status: r.status, ok: r.ok, data: r.data };
+    }
+
+    return res.status(200).json({
+      api_key_prefix:           SHIPBUBBLE_KEY.slice(0, 20) + "...",
+      sender_code_env:          senderCode,
+      recipient_registration:   { ok: regTest.ok, code: regTest.code, raw: regTest.raw?.data },
+      rate_fetch_test:          rateTest
+    });
+  }
+
+  return res.status(400).json({ ok: false, error: `Unknown action: ${action}` });
+                                                }
