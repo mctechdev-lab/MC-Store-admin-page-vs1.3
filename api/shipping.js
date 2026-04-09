@@ -65,7 +65,7 @@ function getCategory(recipientState) {
 
 // Register an address with Shipbubble → returns address_code
 async function registerAddress(details) {
-  const r = await sb("/shipping/address", {
+  const body = {
     name:    details.name    || "Customer",
     email:   details.email   || "customer@mcstore.ng",
     phone:   phone(details.phone),
@@ -73,11 +73,32 @@ async function registerAddress(details) {
     city:    details.city    || "",
     state:   stateStr(details.state),
     country: "NG"
-  });
-  const d    = r.data?.data || r.data || {};
-  const code = d.address_code || d.code || d.id || null;
-  console.log("[SB] registerAddress code:", code, "status:", r.status);
-  return { ok: r.ok && !!code, code: code ? String(code) : null, raw: r };
+  };
+
+  // Try all known Shipbubble address endpoints
+  const endpoints = [
+    "/shipping/sender-address",
+    "/shipping/address",
+    "/shipping/addresses",
+    "/address/create"
+  ];
+
+  for (const endpoint of endpoints) {
+    const r = await sb(endpoint, body);
+    console.log(`[SB] registerAddress ${endpoint} → ${r.status}`, JSON.stringify(r.data).slice(0, 300));
+    if (r.status === 404 || r.status === 405) continue; // try next endpoint
+    const d    = r.data?.data || r.data || {};
+    const code = d.address_code || d.code || d.id || d.addressCode || null;
+    if (r.ok && code) {
+      return { ok: true, code: String(code), raw: r };
+    }
+    // If not 404/405, this is the right endpoint but something else failed
+    if (r.status !== 404 && r.status !== 405) {
+      return { ok: false, code: null, raw: r };
+    }
+  }
+
+  return { ok: false, code: null, raw: { data: { message: "No valid Shipbubble address endpoint found" } } };
 }
 
 // Build package items
@@ -282,32 +303,29 @@ export default async function handler(req, res) {
   // ══════════════════════════════════════════════════
   if (action === "debug") {
     const senderCode = process.env.SHIPBUBBLE_SENDER_CODE || "NOT SET";
-    const regTest    = await registerAddress({
-      name: "Test Customer", email: "test@mcstore.ng", phone: "08012345678",
-      address: "14 Admiralty Way, Lekki Phase 1", city: "Lagos", state: "Lagos"
-    });
 
-    let rateTest = { skipped: "recipient registration failed" };
-    if (regTest.ok && regTest.code) {
-      const r = await sb("/shipping/fetch_rates", {
-        sender_address_code:    senderCode !== "NOT SET" ? senderCode : "MISSING",
-        recipient_address_code: regTest.code,
-        package_category:       "interstate",
-        package: {
-          weight: "1", length: "20", width: "15", height: "10",
-          items: [{ name: "Test", description: "Test", unit_weight: "0.5", unit_amount: "500000", quantity: "1" }]
-        }
-      });
-      rateTest = { status: r.status, ok: r.ok, data: r.data };
+    // Test all address endpoints directly
+    const addrBody = {
+      name: "MC Store", email: "mcstore.care@gmail.com",
+      phone: "+2348056230366",
+      address: "Opposite Bovas Filling Station, Bodija",
+      city: "Ibadan", state: "Oyo State", country: "NG"
+    };
+    const endpointTests = {};
+    for (const ep of ["/shipping/sender-address", "/shipping/address", "/shipping/addresses"]) {
+      const r = await sb(ep, addrBody);
+      endpointTests[ep] = { status: r.status, ok: r.ok, data: r.data };
     }
+    // Also try GET on sender-address to see existing ones
+    const getR = await sb("/shipping/sender-address", {}, "GET");
+    endpointTests["GET /shipping/sender-address"] = { status: getR.status, ok: getR.ok, data: getR.data };
 
     return res.status(200).json({
-      api_key_prefix:           SHIPBUBBLE_KEY.slice(0, 20) + "...",
-      sender_code_env:          senderCode,
-      recipient_registration:   { ok: regTest.ok, code: regTest.code, raw: regTest.raw?.data },
-      rate_fetch_test:          rateTest
+      api_key_prefix:    SHIPBUBBLE_KEY.slice(0, 20) + "...",
+      sender_code_env:   senderCode,
+      endpoint_tests:    endpointTests
     });
   }
 
   return res.status(400).json({ ok: false, error: `Unknown action: ${action}` });
-                                                }
+    }
