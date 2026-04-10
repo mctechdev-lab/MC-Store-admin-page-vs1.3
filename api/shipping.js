@@ -1,248 +1,210 @@
 // ============================================================
-//  api/shipping.js — Vercel Serverless Function
+//  api/shipping.js — MC Store Shipbubble Integration
 //
-//  CORRECT Shipbubble flow (confirmed from debug):
-//  - fetch_rates requires: sender_address_code, recipient_address_code, category
-//  - Both addresses must be pre-registered in Shipbubble
-//  - Sender code stored in SHIPBUBBLE_SENDER_CODE env var (set via admin panel)
-//  - Recipient address registered on-the-fly per order
-//  - category: "interstate" for cross-state, "intrastate" for same state
+//  CORRECT Shipbubble API (from official docs):
+//  - GET  /shipping/address              → list addresses
+//  - POST /shipping/address/validate     → create/validate address
+//  - POST /shipping/fetch_rates          → get rates
+//    Required: sender_address_code (int), reciever_address_code (int),
+//              pickup_date, category_id, package_items, package_dimension
+//  - POST /shipping/labels               → book shipment
 // ============================================================
 
-const SHIPBUBBLE_KEY    = process.env.SHIPBUBBLE_API_KEY    || "sb_prod_4e080eb614d512ca670304775edc1cee9c75df92bf3c06fe82fee00714b44b3a";
-const SHIPBUBBLE_BASE   = "https://api.shipbubble.com/v1";
-const SENDER_STATE      = "Oyo"; // MC Store is in Oyo state
+const KEY  = process.env.SHIPBUBBLE_API_KEY ||
+  'sb_prod_4e080eb614d512ca670304775edc1cee9c75df92bf3c06fe82fee00714b44b3a';
+const BASE = 'https://api.shipbubble.com/v1';
 
-// Raw HTTP call
-async function sb(path, body, method = "POST") {
-  const url = `${SHIPBUBBLE_BASE}${path}`;
-  console.log(`[SB] ${method} ${path}`, body ? JSON.stringify(body).slice(0, 400) : "");
+// ── HTTP helper ──
+async function sb(path, body, method = 'POST') {
+  const url = `${BASE}${path}`;
+  console.log(`[SB] ${method} ${path}`, body ? JSON.stringify(body).slice(0, 400) : '');
   try {
     const r = await fetch(url, {
       method,
       headers: {
-        Authorization:  `Bearer ${SHIPBUBBLE_KEY}`,
-        "Content-Type": "application/json",
-        Accept:         "application/json"
+        Authorization:  `Bearer ${KEY}`,
+        'Content-Type': 'application/json',
+        Accept:         'application/json'
       },
-      body: method !== "GET" ? JSON.stringify(body) : undefined
+      body: method !== 'GET' ? JSON.stringify(body) : undefined
     });
     const raw = await r.text();
-    let data;
-    try { data = JSON.parse(raw); } catch { data = { raw }; }
+    let data; try { data = JSON.parse(raw); } catch { data = { raw }; }
     console.log(`[SB] ${path} → ${r.status}`, JSON.stringify(data).slice(0, 500));
     return { ok: r.ok, status: r.status, data };
   } catch (e) {
+    console.error(`[SB] ${path} error:`, e.message);
     return { ok: false, status: 0, data: { message: e.message } };
   }
 }
 
-// Phone → +234XXXXXXXXXX
-function phone(p) {
-  if (!p) return "+2348000000000";
-  const d = String(p).replace(/\D/g, "");
-  if (d.startsWith("234") && d.length >= 13) return "+" + d;
-  if (d.startsWith("0")   && d.length === 11) return "+234" + d.slice(1);
-  if (d.length === 10)                        return "+234" + d;
-  return "+" + d;
+// ── Phone → +234XXXXXXXXXX ──
+function toPhone(p) {
+  if (!p) return '+2348056230366';
+  const d = String(p).replace(/\D/g, '');
+  if (d.startsWith('234') && d.length >= 13) return '+' + d;
+  if (d.startsWith('0') && d.length === 11)  return '+234' + d.slice(1);
+  if (d.length === 10)                        return '+234' + d;
+  return '+' + d;
 }
 
-// State → "Oyo State" format
-function stateStr(s) {
-  if (!s) return "";
-  const t = s.trim();
-  if (t.toLowerCase() === "fct" || t.toLowerCase().includes("abuja")) return "FCT";
-  if (t.toLowerCase().endsWith(" state")) return t;
-  return t + " State";
+// ── Validate address → get address_code ──
+async function validateAddress(details) {
+  const r = await sb('/shipping/address/validate', {
+    name:    details.name    || 'Customer',
+    email:   details.email   || 'customer@mcstore.ng',
+    phone:   toPhone(details.phone),
+    address: [details.address, details.city, details.state, 'Nigeria']
+              .filter(Boolean).join(', ')
+  });
+  const code = r.data?.data?.address_code || null;
+  console.log('[SB] validateAddress code:', code);
+  return { ok: r.ok && !!code, code: code ? Number(code) : null, raw: r };
 }
 
-// Determine shipping category
-function getCategory(recipientState) {
-  const r = (recipientState || "").toLowerCase().replace(" state","").trim();
-  const s = SENDER_STATE.toLowerCase();
-  return r === s ? "intrastate" : "interstate";
+// ── Today's date in yyyy-mm-dd ──
+function today() {
+  return new Date().toISOString().slice(0, 10);
 }
 
-// Register an address with Shipbubble → returns address_code
-async function registerAddress(details) {
-  const body = {
-    name:    details.name    || "Customer",
-    email:   details.email   || "customer@mcstore.ng",
-    phone:   phone(details.phone),
-    address: details.address || "",
-    city:    details.city    || "",
-    state:   stateStr(details.state),
-    country: "NG"
-  };
-
-  // Try all known Shipbubble address endpoints
-  const endpoints = [
-    "/shipping/sender-address",
-    "/shipping/address",
-    "/shipping/addresses",
-    "/address/create"
-  ];
-
-  for (const endpoint of endpoints) {
-    const r = await sb(endpoint, body);
-    console.log(`[SB] registerAddress ${endpoint} → ${r.status}`, JSON.stringify(r.data).slice(0, 300));
-    if (r.status === 404 || r.status === 405) continue; // try next endpoint
-    const d    = r.data?.data || r.data || {};
-    const code = d.address_code || d.code || d.id || d.addressCode || null;
-    if (r.ok && code) {
-      return { ok: true, code: String(code), raw: r };
-    }
-    // If not 404/405, this is the right endpoint but something else failed
-    if (r.status !== 404 && r.status !== 405) {
-      return { ok: false, code: null, raw: r };
-    }
-  }
-
-  return { ok: false, code: null, raw: { data: { message: "No valid Shipbubble address endpoint found" } } };
-}
-
-// Build package items
+// ── Build package_items array ──
 function buildItems(items) {
   return (items || []).map(i => ({
-    name:        String(i.name || "Item"),
-    description: String(i.name || "Item"),
-    unit_weight: String(Number(i.weight)   || 0.3),
-    unit_amount: String(Math.round((Number(i.price) || 1000) * 100)),
+    name:        String(i.name || 'Item'),
+    description: String(i.name || 'Item'),
+    unit_weight: String(Number(i.weight) || 0.3),
+    unit_amount: String(Math.round((Number(i.price) || 1000) * 100)), // kobo
     quantity:    String(Number(i.quantity) || 1)
   }));
 }
 
 // ── MAIN HANDLER ──
 export default async function handler(req, res) {
-  res.setHeader("Access-Control-Allow-Origin",  "*");
-  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
-  if (req.method === "OPTIONS") return res.status(200).end();
-  if (req.method !== "POST")   return res.status(405).json({ ok: false, error: "Method not allowed" });
+  res.setHeader('Access-Control-Allow-Origin',  '*');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  if (req.method === 'OPTIONS') return res.status(200).end();
+  if (req.method !== 'POST')   return res.status(405).json({ ok: false, error: 'Method not allowed' });
 
   const { action, payload = {} } = req.body || {};
 
-  // ══════════════════════════════════════════════════
+  // ══════════════════════════════════════════
   //  GET RATES
-  //  1. Get sender_address_code from env var (set in admin)
-  //  2. Register recipient address → get recipient_address_code
-  //  3. Call fetch_rates with both codes + category
-  // ══════════════════════════════════════════════════
-  if (action === "getRates") {
+  // ══════════════════════════════════════════
+  if (action === 'getRates') {
     const { recipientAddress, items = [], totalWeight = 0.5 } = payload;
 
-    // Step 1: Sender code — must be set in Vercel env vars via admin panel
-    const senderCode = process.env.SHIPBUBBLE_SENDER_CODE || "";
+    // Sender code from env var
+    const senderCode = process.env.SHIPBUBBLE_SENDER_CODE
+      ? Number(process.env.SHIPBUBBLE_SENDER_CODE)
+      : null;
+
     if (!senderCode) {
       return res.status(200).json({
         ok:    false,
-        error: "Delivery not yet configured. The store admin needs to set up the sender address. Please contact MC Store support.",
+        error: 'Delivery not configured yet. The store admin needs to set SHIPBUBBLE_SENDER_CODE in Vercel env vars.',
         setup_needed: true
       });
     }
 
-    // Step 2: Register recipient address
-    const recipReg = await registerAddress({
-      name:    recipientAddress.fullName || "Customer",
-      email:   recipientAddress.email    || "customer@mcstore.ng",
+    // Validate recipient address → get address_code
+    const recip = await validateAddress({
+      name:    recipientAddress.fullName || 'Customer',
+      email:   recipientAddress.email    || 'customer@mcstore.ng',
       phone:   recipientAddress.phone,
-      address: recipientAddress.street   || "",
-      city:    recipientAddress.city     || "",
-      state:   recipientAddress.state    || ""
+      address: recipientAddress.street   || '',
+      city:    recipientAddress.city     || '',
+      state:   recipientAddress.state    || ''
     });
 
-    if (!recipReg.ok || !recipReg.code) {
-      const msg = recipReg.raw?.data?.message || recipReg.raw?.data?.errors?.[0] || "Could not validate your address";
+    if (!recip.ok || !recip.code) {
+      const msg = recip.raw?.data?.message || recip.raw?.data?.errors?.[0] || 'Could not validate delivery address';
       return res.status(200).json({
         ok:    false,
         error: `Address error: ${msg}. Please check your street, city and state are correct.`
       });
     }
 
-    // Step 3: Fetch rates
-    const category = getCategory(recipientAddress.state);
-    const weight   = Math.max(0.5, Number(totalWeight) || 0.5);
+    // Fetch rates
+    const rateBody = {
+      sender_address_code:   senderCode,
+      reciever_address_code: recip.code,   // note: Shipbubble typo "reciever"
+      pickup_date:           today(),
+      category_id:           1,            // general items
+      package_items:         buildItems(items),
+      package_dimension:     { length: 20, width: 15, height: 10 }
+    };
 
-    const rateRes = await sb("/shipping/fetch_rates", {
-      sender_address_code:    senderCode,
-      recipient_address_code: recipReg.code,
-      package_category:       category,
-      package: {
-        weight: String(weight),
-        length: "20",
-        width:  "15",
-        height: "10",
-        items:  buildItems(items)
-      }
-    });
-
-    const couriers     = rateRes.data?.data?.couriers || rateRes.data?.data?.rates || rateRes.data?.rates || [];
-    const requestToken = rateRes.data?.data?.request_token || "";
+    const rateRes = await sb('/shipping/fetch_rates', rateBody);
+    const couriers     = rateRes.data?.data?.couriers || [];
+    const requestToken = rateRes.data?.data?.request_token || '';
 
     if (!rateRes.ok || !couriers.length) {
-      const msg = rateRes.data?.message || rateRes.data?.data?.message || rateRes.data?.errors?.[0] || "No couriers available";
+      const msg = rateRes.data?.message || rateRes.data?.data?.message || 'No couriers available';
+      console.error('[shipping] getRates failed:', rateRes.status, msg);
       return res.status(200).json({ ok: false, error: `Shipbubble: ${msg}` });
     }
 
     const rates = couriers.map(r => ({
-      courier_id:             r.courier_id    || "",
-      courier_name:           r.courier_name  || "Courier",
-      service_code:           r.service_code  || "",
-      delivery_fee:           Number(r.total  || r.rate_card_amount || r.fee || 0),
-      eta:                    r.delivery_eta  || r.estimated_days ? `${r.estimated_days} day(s)` : "2–5 days",
-      logo:                   r.courier_image || r.courier_logo || "",
+      courier_id:             r.courier_id   || '',
+      courier_name:           r.courier_name || 'Courier',
+      service_code:           r.service_code || '',
+      delivery_fee:           Number(r.total || r.rate_card_amount || 0),
+      eta:                    r.delivery_eta || '2–5 days',
+      logo:                   r.courier_image || '',
       request_token:          requestToken,
-      recipient_address_code: recipReg.code,
+      recipient_address_code: recip.code,
       is_cod:                 r.is_cod_available || false
     }));
 
     return res.status(200).json({ ok: true, rates, request_token: requestToken });
   }
 
-  // ══════════════════════════════════════════════════
-  //  REGISTER SENDER ADDRESS (called from admin panel)
-  //  Admin enters their address, we register it with
-  //  Shipbubble and return the code to save in Vercel
-  // ══════════════════════════════════════════════════
-  if (action === "registerSender") {
+  // ══════════════════════════════════════════
+  //  REGISTER / VALIDATE SENDER (admin)
+  // ══════════════════════════════════════════
+  if (action === 'registerSender') {
     const { name, email, phone: p, address, city, state } = payload;
     if (!address || !city || !state) {
-      return res.status(200).json({ ok: false, error: "Address, city and state are required" });
+      return res.status(200).json({ ok: false, error: 'Address, city and state are required' });
     }
-    const r = await registerAddress({ name, email, phone: p, address, city, state });
+    const r = await validateAddress({ name, email, phone: p, address, city, state });
     if (!r.ok) {
-      const msg = r.raw?.data?.message || r.raw?.data?.errors?.[0] || "Could not register address";
+      const msg = r.raw?.data?.message || r.raw?.data?.errors?.[0] || 'Could not validate address';
       return res.status(200).json({ ok: false, error: msg, raw: r.raw?.data });
     }
     return res.status(200).json({
       ok:           true,
       address_code: r.code,
-      message:      `Sender registered! Save this code in Vercel: SHIPBUBBLE_SENDER_CODE = ${r.code}`
+      message:      `Address validated! Add this to Vercel env vars: SHIPBUBBLE_SENDER_CODE = ${r.code}`
     });
   }
 
-  // ══════════════════════════════════════════════════
-  //  BOOK SHIPMENT (admin confirms order)
-  // ══════════════════════════════════════════════════
-  if (action === "bookShipment") {
+  // ══════════════════════════════════════════
+  //  BOOK SHIPMENT (admin)
+  // ══════════════════════════════════════════
+  if (action === 'bookShipment') {
     const { order } = payload;
-    if (!order) return res.status(400).json({ ok: false, error: "No order provided" });
+    if (!order) return res.status(400).json({ ok: false, error: 'No order provided' });
 
-    const senderCode = process.env.SHIPBUBBLE_SENDER_CODE || "";
-    if (!senderCode) return res.status(200).json({ ok: false, error: "SHIPBUBBLE_SENDER_CODE not set in Vercel env vars" });
+    const senderCode = process.env.SHIPBUBBLE_SENDER_CODE
+      ? Number(process.env.SHIPBUBBLE_SENDER_CODE)
+      : null;
+    if (!senderCode) return res.status(200).json({ ok: false, error: 'SHIPBUBBLE_SENDER_CODE not set' });
 
     const items = (() => {
-      try { return typeof order.items === "string" ? JSON.parse(order.items) : (order.items || []); }
+      try { return typeof order.items === 'string' ? JSON.parse(order.items) : (order.items || []); }
       catch { return []; }
     })();
 
-    const weight = Math.max(0.5, items.reduce((s, i) => s + ((i.quantity || 1) * 0.3), 0));
-    const isCOD  = order.payment_method === "cash_on_delivery";
+    // Validate recipient
+    const recipCode = order.shipbubble_recipient_code
+      ? Number(order.shipbubble_recipient_code)
+      : null;
 
-    // Use saved recipient code or re-register
-    let recipCode = order.shipbubble_recipient_code || "";
-    if (!recipCode) {
-      const reg = await registerAddress({
+    let finalRecipCode = recipCode;
+    if (!finalRecipCode) {
+      const reg = await validateAddress({
         name:    order.customer_name,
         email:   order.customer_email,
         phone:   order.customer_phone,
@@ -250,82 +212,73 @@ export default async function handler(req, res) {
         city:    order.delivery_city,
         state:   order.delivery_state
       });
-      if (!reg.ok) return res.status(200).json({ ok: false, error: "Could not register recipient address for booking" });
-      recipCode = reg.code;
+      if (!reg.ok) return res.status(200).json({ ok: false, error: 'Could not validate recipient address' });
+      finalRecipCode = reg.code;
     }
 
-    const category = getCategory(order.delivery_state);
-    let   requestToken = order.shipbubble_request_token || "";
-
+    // Get request token if not saved
+    let requestToken = order.shipbubble_request_token || '';
     if (!requestToken) {
-      const rr = await sb("/shipping/fetch_rates", {
-        sender_address_code:    senderCode,
-        recipient_address_code: recipCode,
-        package_category:       category,
-        package: {
-          weight: String(weight), length: "20", width: "15", height: "10",
-          items:  buildItems(items)
-        }
+      const rr = await sb('/shipping/fetch_rates', {
+        sender_address_code:   senderCode,
+        reciever_address_code: finalRecipCode,
+        pickup_date:           today(),
+        category_id:           1,
+        package_items:         buildItems(items),
+        package_dimension:     { length: 20, width: 15, height: 10 }
       });
-      requestToken = rr.data?.data?.request_token || "";
-      if (!requestToken) return res.status(200).json({ ok: false, error: "Could not get booking token from Shipbubble" });
+      requestToken = rr.data?.data?.request_token || '';
+      if (!requestToken) return res.status(200).json({ ok: false, error: 'Could not get booking token' });
     }
 
-    const { ok, data } = await sb("/shipping/labels", {
-      sender_address_code:    senderCode,
-      recipient_address_code: recipCode,
-      package_category:       category,
-      package: {
-        weight: String(weight), length: "20", width: "15", height: "10",
-        items:  buildItems(items)
-      },
-      payment_type:  isCOD ? "COD" : "prepaid",
-      ...(isCOD ? { cod_amount: Number(order.total || 0) } : {}),
-      service_code:  order.shipbubble_service_code || "",
-      courier_id:    order.shipbubble_courier_id   || "",
-      request_token: requestToken
+    const isCOD = order.payment_method === 'cash_on_delivery';
+    const { ok, data } = await sb('/shipping/labels', {
+      request_token:         requestToken,
+      service_code:          order.shipbubble_service_code || '',
+      ...(isCOD ? { is_cod: true, cod_amount: Number(order.total || 0) } : {})
     });
 
     if (!ok || !data?.data) {
-      return res.status(200).json({ ok: false, error: data?.message || "Shipbubble could not create shipment" });
+      return res.status(200).json({ ok: false, error: data?.message || 'Shipbubble could not create shipment' });
     }
+
     const s = data.data;
     return res.status(200).json({
       ok:           true,
-      tracking_id:  s.tracking_id  || s.id         || "",
-      courier_name: s.courier_name || s.courier     || "",
-      label_url:    s.label_url    || s.waybill_url || ""
+      tracking_id:  s.tracking_id  || s.id || '',
+      courier_name: s.courier_name || s.courier || '',
+      label_url:    s.label_url    || s.waybill_url || ''
     });
   }
 
-  // ══════════════════════════════════════════════════
+  // ══════════════════════════════════════════
   //  DEBUG
-  // ══════════════════════════════════════════════════
-  if (action === "debug") {
-    const senderCode = process.env.SHIPBUBBLE_SENDER_CODE || "NOT SET";
+  // ══════════════════════════════════════════
+  if (action === 'debug') {
+    const senderCode = process.env.SHIPBUBBLE_SENDER_CODE || 'NOT SET';
 
-    // Test all address endpoints directly
-    const addrBody = {
-      name: "MC Store", email: "mcstore.care@gmail.com",
-      phone: "+2348056230366",
-      address: "Opposite Bovas Filling Station, Bodija",
-      city: "Ibadan", state: "Oyo State", country: "NG"
-    };
-    const endpointTests = {};
-    for (const ep of ["/shipping/sender-address", "/shipping/address", "/shipping/addresses"]) {
-      const r = await sb(ep, addrBody);
-      endpointTests[ep] = { status: r.status, ok: r.ok, data: r.data };
-    }
-    // Also try GET on sender-address to see existing ones
-    const getR = await sb("/shipping/sender-address", {}, "GET");
-    endpointTests["GET /shipping/sender-address"] = { status: getR.status, ok: getR.ok, data: getR.data };
+    // Test wallet balance (simplest authenticated call)
+    const wallet = await sb('/shipping/wallet/balance', {}, 'GET');
+
+    // Get existing addresses
+    const addrs = await sb('/shipping/address', {}, 'GET');
+
+    // Test validate a new address
+    const validate = await sb('/shipping/address/validate', {
+      name:    'Test Customer',
+      email:   'test@mcstore.ng',
+      phone:   '+2348012345678',
+      address: '14 Admiralty Way, Lekki Phase 1, Lagos, Nigeria'
+    });
 
     return res.status(200).json({
-      api_key_prefix:    SHIPBUBBLE_KEY.slice(0, 20) + "...",
-      sender_code_env:   senderCode,
-      endpoint_tests:    endpointTests
+      api_key_prefix:  KEY.slice(0, 20) + '...',
+      sender_code_env: senderCode,
+      wallet_balance:  { status: wallet.status, data: wallet.data },
+      my_addresses:    { status: addrs.status,  data: addrs.data  },
+      validate_test:   { status: validate.status, data: validate.data }
     });
   }
 
   return res.status(400).json({ ok: false, error: `Unknown action: ${action}` });
-    }
+}
