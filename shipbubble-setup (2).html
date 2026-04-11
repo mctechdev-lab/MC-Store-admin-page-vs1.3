@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
+<title>Shipbubble Setup — MC Store Admin</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+:root{
+  --blue:#1a56db;--blue-dk:#1347c8;--blue-lt:#eff6ff;--blue-md:#dbeafe;
+  --white:#fff;--bg:#f0f7ff;--text:#0f172a;--muted:#64748b;--border:#e2e8f0;
+  --green:#16a34a;--green-lt:#dcfce7;--red:#dc2626;--red-lt:#fef2f2;
+  --gold:#f59e0b;--gold-lt:#fefce8;
+}
+html,body{background:var(--bg);font-family:'DM Sans',sans-serif;color:var(--text);}
+@keyframes spin{to{transform:rotate(360deg);}}
+.page{padding:.85rem .85rem 4rem;max-width:600px;margin:0 auto;}
+.page-title{font-size:1.1rem;font-weight:800;margin-bottom:1.25rem;display:flex;align-items:center;gap:.6rem;}
+.card{background:var(--white);border:1.5px solid var(--border);border-radius:16px;padding:1.25rem;margin-bottom:1rem;box-shadow:0 2px 8px rgba(26,86,219,.05);}
+.card-head{font-size:.78rem;font-weight:800;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin-bottom:1rem;display:flex;align-items:center;gap:.5rem;}
+.ok{background:var(--green-lt);border:1.5px solid #86efac;border-radius:10px;padding:.75rem 1rem;font-size:.83rem;color:var(--green);font-weight:700;display:flex;align-items:center;gap:.5rem;margin-bottom:.75rem;}
+.warn{background:var(--gold-lt);border:1.5px solid #fcd34d;border-radius:10px;padding:.85rem 1rem;font-size:.82rem;color:#854d0e;font-weight:600;line-height:1.6;margin-bottom:.75rem;}
+.err{background:var(--red-lt);border:1.5px solid #fecaca;border-radius:10px;padding:.85rem 1rem;font-size:.82rem;color:var(--red);font-weight:600;line-height:1.5;margin-bottom:.75rem;}
+.field{margin-bottom:.75rem;}
+.field label{display:block;font-size:.72rem;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-bottom:.35rem;}
+.field input,.field select{width:100%;border:1.5px solid var(--border);border-radius:8px;padding:.65rem .85rem;font-family:'DM Sans',sans-serif;font-size:.875rem;outline:none;transition:border .2s;color:var(--text);}
+.field input:focus,.field select:focus{border-color:var(--blue);}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:.75rem;}
+.btn{background:var(--blue);color:white;border:none;border-radius:10px;padding:.75rem 1.25rem;font-family:'DM Sans',sans-serif;font-size:.875rem;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:.5rem;transition:all .2s;width:100%;}
+.btn:hover{background:var(--blue-dk);}
+.btn:disabled{opacity:.6;cursor:not-allowed;}
+.btn.secondary{background:var(--bg);color:var(--text);border:1.5px solid var(--border);}
+.code-box{background:#0f172a;color:#4ade80;border-radius:10px;padding:1rem 1.1rem;font-family:monospace;font-size:.9rem;word-break:break-all;margin:.75rem 0;position:relative;}
+.copy-btn{position:absolute;top:.5rem;right:.5rem;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);color:white;border-radius:6px;padding:.25rem .6rem;font-size:.72rem;cursor:pointer;font-family:'DM Sans',sans-serif;}
+.addr-card{border:1.5px solid var(--border);border-radius:12px;padding:.85rem 1rem;margin-bottom:.6rem;cursor:pointer;transition:all .2s;}
+.addr-card:hover,.addr-card.selected{border-color:var(--blue);background:var(--blue-lt);}
+.addr-card-name{font-size:.88rem;font-weight:800;}
+.addr-card-detail{font-size:.75rem;color:var(--muted);margin-top:3px;line-height:1.5;}
+.addr-code{font-size:.72rem;background:var(--blue-lt);color:var(--blue);padding:.15rem .5rem;border-radius:50px;font-weight:700;margin-top:.4rem;display:inline-block;}
+.rate-card{border:1.5px solid var(--border);border-radius:10px;padding:.75rem 1rem;margin-bottom:.5rem;display:flex;justify-content:space-between;align-items:center;}
+.step-num{width:24px;height:24px;border-radius:50%;background:var(--blue);color:white;font-size:.72rem;font-weight:800;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;}
+.spinner{width:16px;height:16px;border:2.5px solid rgba(255,255,255,.3);border-top-color:white;border-radius:50%;animation:spin .8s linear infinite;}
+pre{background:#0f172a;color:#e2e8f0;border-radius:10px;padding:.85rem;font-size:.7rem;overflow-x:auto;white-space:pre-wrap;word-break:break-all;max-height:300px;overflow-y:auto;margin-top:.75rem;}
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="page-title"><i class="fas fa-truck" style="color:var(--blue)"></i> Shipbubble Setup</div>
+
+  <!-- STATUS -->
+  <div class="card">
+    <div class="card-head"><i class="fas fa-satellite-dish"></i> Current Status</div>
+    <div id="senderStatus"><i class="fas fa-spinner fa-spin"></i> Checking...</div>
+  </div>
+
+  <!-- STEP 1: FETCH ADDRESSES -->
+  <div class="card">
+    <div class="card-head"><span class="step-num">1</span>&nbsp; Get Your Address Code from Shipbubble</div>
+    <p style="font-size:.82rem;color:var(--muted);margin-bottom:1rem;line-height:1.6">
+      You already have <strong>Gift eze, Bodija, Ibadan</strong> registered in Shipbubble.
+      Click below to fetch your address code.
+    </p>
+    <button class="btn" onclick="fetchAddresses()" id="fetchBtn">
+      <i class="fas fa-download"></i> Fetch My Address Code
+    </button>
+    <div id="fetchResult" style="margin-top:.85rem"></div>
+  </div>
+
+  <!-- STEP 2 (shown after fetching) -->
+  <div class="card" id="step2" style="display:none">
+    <div class="card-head"><span class="step-num">2</span>&nbsp; Add Code to Vercel</div>
+    <p style="font-size:.82rem;color:var(--muted);margin-bottom:.75rem;line-height:1.6">
+      Copy this code → go to <strong>both</strong> Vercel projects (store + admin) →
+      Settings → Environment Variables → add:
+    </p>
+    <div class="code-box">
+      SHIPBUBBLE_SENDER_CODE = <span id="codeDisplay">—</span>
+      <button class="copy-btn" onclick="copyCode()"><i class="fas fa-copy"></i> Copy</button>
+    </div>
+    <div style="font-size:.78rem;color:var(--muted)">
+      After saving, click <strong>Redeploy</strong> on both projects. Then test rates below.
+    </div>
+  </div>
+
+  <!-- STEP 3: VALIDATE ADDRESS (if no addresses found) -->
+  <div class="card" id="step3validate" style="display:none">
+    <div class="card-head"><span class="step-num">2</span>&nbsp; Validate Your Address with Shipbubble</div>
+    <p style="font-size:.82rem;color:var(--muted);margin-bottom:1rem;line-height:1.6">
+      No existing addresses found. Enter your address below to validate it and get a code.
+    </p>
+    <div class="field"><label>Full Address (street, city, state, Nigeria)</label>
+      <input id="vAddr" value="3 Adebajo St, Kongi Area Bodija, Ibadan, Oyo State, Nigeria">
+    </div>
+    <div class="grid2">
+      <div class="field"><label>Name</label><input id="vName" value="MC Store"></div>
+      <div class="field"><label>Phone</label><input id="vPhone" value="+2348056230366"></div>
+    </div>
+    <button class="btn" onclick="validateAddress()" id="validateBtn">
+      <i class="fas fa-check-circle"></i> Validate Address
+    </button>
+    <div id="validateResult" style="margin-top:.75rem"></div>
+  </div>
+
+  <!-- STEP 4: TEST RATES -->
+  <div class="card">
+    <div class="card-head"><span class="step-num">3</span>&nbsp; Test Live Delivery Rates</div>
+    <div class="grid2" style="margin-bottom:.75rem">
+      <div class="field"><label>City</label><input id="tCity" value="Lagos"></div>
+      <div class="field">
+        <label>State</label>
+        <select id="tState">
+          <option>Abia</option><option>Adamawa</option><option>Akwa Ibom</option>
+          <option>Anambra</option><option>Bauchi</option><option>Bayelsa</option>
+          <option>Benue</option><option>Borno</option><option>Cross River</option>
+          <option>Delta</option><option>Ebonyi</option><option>Edo</option>
+          <option>Ekiti</option><option>Enugu</option><option>FCT</option>
+          <option>Gombe</option><option>Imo</option><option>Jigawa</option>
+          <option>Kaduna</option><option>Kano</option><option>Katsina</option>
+          <option>Kebbi</option><option>Kogi</option><option>Kwara</option>
+          <option selected>Lagos</option><option>Nasarawa</option><option>Niger</option>
+          <option>Ogun</option><option>Ondo</option><option>Osun</option>
+          <option>Oyo</option><option>Plateau</option><option>Rivers</option>
+          <option>Sokoto</option><option>Taraba</option><option>Yobe</option>
+          <option>Zamfara</option>
+        </select>
+      </div>
+    </div>
+    <button class="btn secondary" onclick="testRates()" id="testBtn">
+      <i class="fas fa-play"></i> Test Rates
+    </button>
+    <div id="testResult" style="margin-top:.75rem"></div>
+  </div>
+
+  <!-- DEBUG -->
+  <div class="card">
+    <div class="card-head"><i class="fas fa-bug"></i> Full Debug</div>
+    <button class="btn secondary" onclick="runDebug()" id="debugBtn">
+      <i class="fas fa-terminal"></i> Run Full Debug
+    </button>
+    <div id="debugResult"></div>
+  </div>
+</div>
+
+<script>
+const fmt = n => '₦' + Number(n||0).toLocaleString('en-NG');
+let selectedCode = '';
+
+// ── STATUS CHECK ──
+async function checkStatus() {
+  const el = document.getElementById('senderStatus');
+  try {
+    const r = await fetch('/api/shipping', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ action:'debug' })
+    });
+    const d = await r.json();
+    const code = d.sender_code_env;
+    if (code && code !== 'NOT SET') {
+      el.innerHTML = `<div class="ok"><i class="fas fa-check-circle"></i> Sender code is configured: <strong>${code}</strong> ✅</div>`;
+    } else {
+      el.innerHTML = `<div class="warn"><i class="fas fa-triangle-exclamation"></i> <strong>Sender code not set yet.</strong><br>Follow steps 1–2 below to get and set your address code.</div>`;
+    }
+  } catch(e) {
+    el.innerHTML = `<div class="err">Could not check: ${e.message}</div>`;
+  }
+}
+
+// ── FETCH ADDRESSES ──
+window.fetchAddresses = async function() {
+  const btn = document.getElementById('fetchBtn');
+  const res = document.getElementById('fetchResult');
+  btn.disabled = true;
+  btn.innerHTML = '<div class="spinner"></div> Fetching...';
+
+  try {
+    const r = await fetch('/api/get-sender-code');
+    const d = await r.json();
+
+    // Extract addresses from response
+    const addrData = d.addresses?.data;
+    const results  = addrData?.data?.results || addrData?.results || [];
+    const addrList = Array.isArray(results) ? results : (results ? [results] : []);
+
+    // Show wallet balance
+    const balance = d.wallet?.data?.data?.balance || d.wallet?.data?.balance || null;
+    const balanceHtml = balance !== null
+      ? `<div style="font-size:.78rem;color:var(--muted);margin-bottom:.6rem"><i class="fas fa-wallet"></i> Wallet balance: <strong style="color:var(--green)">₦${Number(balance).toLocaleString()}</strong></div>`
+      : '';
+
+    if (!addrList.length) {
+      // No addresses found — show validate option and raw response
+      res.innerHTML = `${balanceHtml}
+        <div class="warn"><i class="fas fa-triangle-exclamation"></i>
+          No validated addresses found in your Shipbubble account.<br>
+          Use Step 2 below to validate your address.
+        </div>
+        <pre>${JSON.stringify({ addresses: addrData, wallet: d.wallet?.data }, null, 2)}</pre>`;
+      document.getElementById('step3validate').style.display = 'block';
+      btn.disabled = false;
+      btn.innerHTML = '<i class="fas fa-download"></i> Fetch My Address Code';
+      return;
+    }
+
+    res.innerHTML = `${balanceHtml}
+      <div class="ok"><i class="fas fa-check-circle"></i> Found ${addrList.length} address(es)</div>` +
+      addrList.map((a, i) => {
+        const code = a.address_code || '';
+        const addrInfo = a.address_data || a;
+        return `
+        <div class="addr-card ${i===0?'selected':''}" onclick="selectCode(this,'${code}')">
+          <div class="addr-card-name">${addrInfo.name || 'MC Store'}</div>
+          <div class="addr-card-detail">
+            ${[addrInfo.formatted_address || addrInfo.street, addrInfo.city, addrInfo.state].filter(Boolean).join(', ')}
+            ${addrInfo.phone ? '<br>' + addrInfo.phone : ''}
+          </div>
+          <div class="addr-code">Code: <strong>${code}</strong></div>
+        </div>`;
+      }).join('');
+
+    // Auto-select first
+    if (addrList[0]?.address_code) {
+      selectCode(null, String(addrList[0].address_code));
+    }
+
+  } catch(e) {
+    res.innerHTML = `<div class="err"><i class="fas fa-circle-xmark"></i> Error: ${e.message}</div>`;
+  }
+
+  btn.disabled = false;
+  btn.innerHTML = '<i class="fas fa-download"></i> Fetch My Address Code';
+};
+
+window.selectCode = function(el, code) {
+  document.querySelectorAll('.addr-card').forEach(c => c.classList.remove('selected'));
+  if (el) el.classList.add('selected');
+  if (!code || code === 'undefined') return;
+  selectedCode = code;
+  document.getElementById('codeDisplay').textContent = code;
+  document.getElementById('step2').style.display = 'block';
+  document.getElementById('step2').scrollIntoView({ behavior:'smooth' });
+};
+
+window.copyCode = function() {
+  if (!selectedCode) return;
+  navigator.clipboard.writeText(selectedCode).then(() => {
+    const b = document.querySelector('.copy-btn');
+    b.innerHTML = '<i class="fas fa-check"></i> Copied!';
+    setTimeout(() => b.innerHTML = '<i class="fas fa-copy"></i> Copy', 2000);
+  });
+};
+
+// ── VALIDATE ADDRESS ──
+window.validateAddress = async function() {
+  const btn = document.getElementById('validateBtn');
+  const res = document.getElementById('validateResult');
+  btn.disabled = true;
+  btn.innerHTML = '<div class="spinner"></div> Validating...';
+  try {
+    const r = await fetch('/api/get-sender-code', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({
+        action: 'validate',
+        payload: {
+          name:    document.getElementById('vName').value,
+          phone:   document.getElementById('vPhone').value,
+          address: document.getElementById('vAddr').value
+        }
+      })
+    });
+    const d = await r.json();
+    const code = d.data?.data?.address_code || d.data?.address_code || null;
+    if (code) {
+      res.innerHTML = `<div class="ok"><i class="fas fa-check-circle"></i> Address validated! Code: <strong>${code}</strong></div>`;
+      selectCode(null, String(code));
+    } else {
+      res.innerHTML = `<div class="err"><i class="fas fa-circle-xmark"></i> ${d.data?.message || d.data?.data?.message || 'Validation failed'}</div>
+        <pre>${JSON.stringify(d, null, 2)}</pre>`;
+    }
+  } catch(e) {
+    res.innerHTML = `<div class="err">Error: ${e.message}</div>`;
+  }
+  btn.disabled = false;
+  btn.innerHTML = '<i class="fas fa-check-circle"></i> Validate Address';
+};
+
+// ── TEST RATES ──
+window.testRates = async function() {
+  const btn = document.getElementById('testBtn');
+  const res = document.getElementById('testResult');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Testing...';
+  try {
+    const r = await fetch('/api/shipping', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({
+        action:'getRates',
+        payload:{
+          recipientAddress:{
+            fullName:'Test Customer', email:'test@mcstore.ng', phone:'08012345678',
+            street:'14 Admiralty Way', city: document.getElementById('tCity').value,
+            state: document.getElementById('tState').value
+          },
+          items:[{name:'Test Item',quantity:1,weight:0.5,price:5000}],
+          totalWeight:0.5
+        }
+      })
+    });
+    const d = await r.json();
+    if (d.ok && d.rates?.length) {
+      res.innerHTML = `<div class="ok"><i class="fas fa-check-circle"></i> ${d.rates.length} courier(s) — Shipbubble is working! ✅</div>` +
+        d.rates.map(r => `
+          <div class="rate-card">
+            <div><div style="font-weight:800;font-size:.85rem">${r.courier_name}</div>
+                 <div style="font-size:.72rem;color:var(--muted)">${r.eta}</div></div>
+            <div style="font-weight:800;color:var(--blue)">${fmt(r.delivery_fee)}</div>
+          </div>`).join('');
+    } else {
+      res.innerHTML = `<div class="err"><i class="fas fa-circle-xmark"></i> ${d.error||'No couriers returned'}</div>
+        ${d.setup_needed ? '<div class="warn">Set SHIPBUBBLE_SENDER_CODE in Vercel first (Steps 1–2 above), then redeploy.</div>' : ''}`;
+    }
+  } catch(e) {
+    res.innerHTML = `<div class="err">Error: ${e.message}</div>`;
+  }
+  btn.disabled = false;
+  btn.innerHTML = '<i class="fas fa-play"></i> Test Rates';
+};
+
+// ── FULL DEBUG ──
+window.runDebug = async function() {
+  const btn = document.getElementById('debugBtn');
+  const res = document.getElementById('debugResult');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Running...';
+  try {
+    const [r1, r2] = await Promise.all([
+      fetch('/api/shipping', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ action:'debug' }) }),
+      fetch('/api/get-sender-code')
+    ]);
+    const [d1, d2] = await Promise.all([r1.json(), r2.json()]);
+    res.innerHTML = `<pre>${JSON.stringify({ shipping_debug: d1, address_lookup: d2 }, null, 2)}</pre>`;
+  } catch(e) {
+    res.innerHTML = `<div class="err">Error: ${e.message}</div>`;
+  }
+  btn.disabled = false;
+  btn.innerHTML = '<i class="fas fa-terminal"></i> Run Full Debug';
+};
+
+checkStatus();
+</script>
+</body>
+</html>
