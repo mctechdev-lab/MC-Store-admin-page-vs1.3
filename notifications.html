@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
+<title>Notifications — MC Store Admin</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+:root{
+  --blue:#1a56db;--blue-dk:#1347c8;--blue-lt:#eff6ff;--blue-md:#dbeafe;
+  --white:#fff;--bg:#f0f7ff;--text:#0f172a;--muted:#64748b;--border:#e2e8f0;
+  --green:#16a34a;--green-lt:#dcfce7;--red:#dc2626;--red-lt:#fef2f2;
+  --gold:#f59e0b;--gold-lt:#fefce8;--purple:#7c3aed;--purple-lt:#f5f3ff;
+  --orange:#f97316;--orange-lt:#fff7ed;
+}
+html,body{min-height:100vh;background:var(--bg);font-family:'DM Sans',sans-serif;color:var(--text);}
+@keyframes spin{to{transform:rotate(360deg);}}
+@keyframes fadeUp{from{opacity:0;transform:translateY(8px);}to{opacity:1;transform:none;}}
+
+/* TOPBAR */
+.topbar{position:sticky;top:0;z-index:50;background:var(--white);border-bottom:1.5px solid var(--border);padding:0 1rem;height:56px;display:flex;align-items:center;gap:.75rem;box-shadow:0 2px 8px rgba(26,86,219,.07);}
+.topbar-title{font-weight:800;font-size:1rem;flex:1;}
+.topbar-title span{color:var(--blue);}
+
+/* TABS */
+.tabs{display:flex;gap:0;background:var(--white);border-bottom:1.5px solid var(--border);padding:0 1rem;}
+.tab{flex:1;padding:.75rem .5rem;text-align:center;font-size:.78rem;font-weight:700;color:var(--muted);cursor:pointer;border-bottom:3px solid transparent;transition:all .2s;}
+.tab.active{color:var(--blue);border-bottom-color:var(--blue);}
+
+/* COMPOSE CARD */
+.compose-card{background:var(--white);border:1.5px solid var(--border);border-radius:16px;margin:1rem;padding:1rem;animation:fadeUp .3s ease;}
+.compose-title{font-size:.88rem;font-weight:800;margin-bottom:.85rem;display:flex;align-items:center;gap:.5rem;}
+.compose-title i{color:var(--blue);}
+.form-label{font-size:.7rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px;display:block;}
+.form-input{width:100%;padding:.65rem .85rem;background:var(--bg);border:1.5px solid var(--border);border-radius:10px;font-family:'DM Sans',sans-serif;font-size:.88rem;color:var(--text);outline:none;margin-bottom:.75rem;transition:border-color .2s;}
+.form-input:focus{border-color:var(--blue);background:var(--white);}
+textarea.form-input{resize:vertical;min-height:80px;}
+
+/* AUDIENCE SELECTOR */
+.audience-grid{display:grid;grid-template-columns:1fr 1fr;gap:.5rem;margin-bottom:.75rem;}
+.aud-card{border:2px solid var(--border);border-radius:12px;padding:.75rem;cursor:pointer;transition:all .2s;text-align:center;}
+.aud-card.selected{border-color:var(--blue);background:var(--blue-lt);}
+.aud-icon{font-size:1.4rem;margin-bottom:.3rem;}
+.aud-label{font-size:.75rem;font-weight:700;}
+.aud-sub{font-size:.65rem;color:var(--muted);margin-top:2px;}
+.aud-card.selected .aud-sub{color:var(--blue);}
+
+/* SEND BUTTON */
+.send-btn{width:100%;padding:.8rem;background:linear-gradient(135deg,var(--blue),var(--blue-dk));color:white;border:none;border-radius:12px;font-family:'DM Sans',sans-serif;font-size:.9rem;font-weight:800;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:.5rem;box-shadow:0 4px 12px rgba(26,86,219,.3);transition:all .2s;}
+.send-btn:active{transform:scale(.97);}
+.send-btn:disabled{opacity:.6;pointer-events:none;}
+
+/* QUICK TEMPLATES */
+.templates-section{margin:0 1rem 1rem;}
+.section-title{font-size:.75rem;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:.6rem;}
+.template-chips{display:flex;flex-wrap:wrap;gap:.4rem;}
+.tpl-chip{padding:6px 12px;border-radius:20px;font-size:.73rem;font-weight:700;border:1.5px solid var(--border);background:var(--white);color:var(--text);cursor:pointer;transition:all .15s;}
+.tpl-chip:hover{border-color:var(--blue);color:var(--blue);background:var(--blue-lt);}
+
+/* HISTORY */
+.history-list{padding:0 1rem 5rem;}
+.notif-card{background:var(--white);border:1.5px solid var(--border);border-radius:14px;padding:.85rem 1rem;margin-bottom:.6rem;animation:fadeUp .3s ease;}
+.notif-head{display:flex;align-items:flex-start;gap:.6rem;margin-bottom:.4rem;}
+.notif-type-icon{width:34px;height:34px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:.85rem;flex-shrink:0;}
+.nt-broadcast{background:var(--blue-lt);color:var(--blue);}
+.nt-order{background:var(--green-lt);color:var(--green);}
+.nt-promo{background:var(--gold-lt);color:var(--gold);}
+.nt-alert{background:var(--red-lt);color:var(--red);}
+.notif-info{flex:1;min-width:0;}
+.notif-title{font-size:.85rem;font-weight:700;}
+.notif-body{font-size:.75rem;color:var(--muted);margin-top:2px;line-height:1.4;}
+.notif-meta{display:flex;align-items:center;gap:.5rem;margin-top:.5rem;flex-wrap:wrap;}
+.notif-badge{font-size:.63rem;font-weight:700;padding:2px 8px;border-radius:20px;}
+.nb-all{background:var(--blue-lt);color:var(--blue);}
+.nb-sent{background:var(--green-lt);color:var(--green);}
+.notif-time{font-size:.65rem;color:var(--muted);}
+
+/* STATS ROW */
+.stats-row{display:grid;grid-template-columns:repeat(3,1fr);gap:.5rem;padding:.85rem 1rem;}
+.stat-box{background:var(--white);border:1.5px solid var(--border);border-radius:12px;padding:.7rem .5rem;text-align:center;}
+.stat-num{font-size:1.1rem;font-weight:800;}
+.stat-lbl{font-size:.6rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-top:2px;}
+.s-total .stat-num{color:var(--blue);}
+.s-sent  .stat-num{color:var(--green);}
+.s-read  .stat-num{color:var(--gold);}
+
+/* EMPTY */
+.empty{text-align:center;padding:3rem 1rem;color:var(--muted);}
+.empty i{font-size:2.5rem;margin-bottom:.75rem;opacity:.3;}
+.empty p{font-size:.85rem;}
+
+/* TOAST */
+.toast-layer{position:fixed;top:18px;left:50%;transform:translateX(-50%);z-index:9999;pointer-events:none;display:flex;flex-direction:column;align-items:center;gap:8px;width:min(380px,92vw);}
+.toast{width:100%;display:flex;align-items:center;gap:10px;padding:12px 16px;border-radius:12px;background:var(--white);border:1.5px solid var(--border);box-shadow:0 8px 32px rgba(0,0,0,.12);font-size:.85rem;font-weight:600;pointer-events:all;animation:toastIn .3s cubic-bezier(.34,1.56,.64,1) both;}
+@keyframes toastIn{from{opacity:0;transform:translateY(-16px) scale(.94);}to{opacity:1;transform:none;}}
+.toast.success{border-color:#bbf7d0;color:var(--green);}
+.toast.error{border-color:#fecaca;color:var(--red);}
+.toast.info{border-color:var(--blue-md);color:var(--blue);}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-title">🔔 <span>Notifications</span></div>
+</div>
+
+<div class="tabs">
+  <div class="tab active" data-tab="compose">Compose</div>
+  <div class="tab" data-tab="history">History</div>
+</div>
+
+<!-- COMPOSE TAB -->
+<div id="tab-compose">
+
+  <!-- Stats -->
+  <div class="stats-row">
+    <div class="stat-box s-total"><div class="stat-num" id="sTotalSubs">—</div><div class="stat-lbl">Subscribers</div></div>
+    <div class="stat-box s-sent"><div class="stat-num" id="sTotalSent">—</div><div class="stat-lbl">Sent Today</div></div>
+    <div class="stat-box s-read"><div class="stat-num" id="sTotalRead">—</div><div class="stat-lbl">Total Sent</div></div>
+  </div>
+
+  <!-- Quick Templates -->
+  <div class="templates-section">
+    <div class="section-title">Quick Templates</div>
+    <div class="template-chips">
+      <div class="tpl-chip" onclick="applyTemplate('flash')">⚡ Flash Sale</div>
+      <div class="tpl-chip" onclick="applyTemplate('new')">🆕 New Arrivals</div>
+      <div class="tpl-chip" onclick="applyTemplate('order')">📦 Order Ready</div>
+      <div class="tpl-chip" onclick="applyTemplate('promo')">🎁 Promo Code</div>
+      <div class="tpl-chip" onclick="applyTemplate('restock')">🔋 Restock Alert</div>
+      <div class="tpl-chip" onclick="applyTemplate('welcome')">👋 Welcome Back</div>
+    </div>
+  </div>
+
+  <!-- Compose Form -->
+  <div class="compose-card">
+    <div class="compose-title"><i class="fas fa-paper-plane"></i> Send Notification</div>
+
+    <!-- Audience -->
+    <label class="form-label">Send To</label>
+    <div class="audience-grid">
+      <div class="aud-card selected" data-aud="all" onclick="selectAud(this,'all')">
+        <div class="aud-icon">📢</div>
+        <div class="aud-label">All Customers</div>
+        <div class="aud-sub" id="audAllCount">Loading...</div>
+      </div>
+      <div class="aud-card" data-aud="buyers" onclick="selectAud(this,'buyers')">
+        <div class="aud-icon">🛒</div>
+        <div class="aud-label">Buyers Only</div>
+        <div class="aud-sub">Who ordered before</div>
+      </div>
+      <div class="aud-card" data-aud="nobuy" onclick="selectAud(this,'nobuy')">
+        <div class="aud-icon">💤</div>
+        <div class="aud-label">Never Bought</div>
+        <div class="aud-sub">Convert them!</div>
+      </div>
+      <div class="aud-card" data-aud="wishlist" onclick="selectAud(this,'wishlist')">
+        <div class="aud-icon">❤️</div>
+        <div class="aud-label">Wishlist Users</div>
+        <div class="aud-sub">Have saved items</div>
+      </div>
+    </div>
+
+    <!-- Title -->
+    <label class="form-label">Notification Title</label>
+    <input type="text" class="form-input" id="notifTitle" placeholder="e.g. Flash Sale! 50% Off Today Only 🔥" maxlength="60">
+
+    <!-- Message -->
+    <label class="form-label">Message</label>
+    <textarea class="form-input" id="notifMessage" placeholder="Write your message here..." maxlength="200"></textarea>
+
+    <!-- Link (optional) -->
+    <label class="form-label">Link (Optional)</label>
+    <input type="url" class="form-input" id="notifUrl" placeholder="https://mcstore.com.ng/...">
+
+    <button class="send-btn" id="sendBtn" onclick="sendNotification()">
+      <i class="fas fa-paper-plane"></i> Send Notification
+    </button>
+  </div>
+</div>
+
+<!-- HISTORY TAB -->
+<div id="tab-history" style="display:none;">
+  <div class="history-list" id="historyList">
+    <div class="empty"><i class="fas fa-bell-slash"></i><p>No notifications sent yet</p></div>
+  </div>
+</div>
+
+<div class="toast-layer" id="toastLayer"></div>
+
+<script>
+const SB_URL = 'https://kswikkoqfpyxuurzxail.supabase.co';
+const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imtzd2lra29xZnB5eHV1cnp4YWlsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEzNjEzMDQsImV4cCI6MjA4NjkzNzMwNH0.uuoSKWOTeXot1HJys0EO9OcIRBL0mKrNHIUHIAPCpZ4';
+const db = supabase.createClient(SB_URL, SB_KEY);
+
+let selectedAud = 'all';
+let allCustomers = [];
+
+// Templates
+const templates = {
+  flash:   { title:'⚡ Flash Sale! Limited Time Only', msg:'Massive discounts on phone accessories today only! Up to 40% off. Shop now before stock runs out! 🔥' },
+  new:     { title:'🆕 New Products Just Arrived!', msg:'Fresh stock of chargers, earbuds, power banks and more. Check out what\'s new at MC Store!' },
+  order:   { title:'📦 Your Order is Ready!', msg:'Great news! Your order has been processed and is ready for delivery. Track it on our website.' },
+  promo:   { title:'🎁 Special Promo Just for You!', msg:'Use code MCSTORE10 at checkout to get extra discount on your next order. Limited time!' },
+  restock: { title:'🔋 Back in Stock!', msg:'Your favorite products are back! Grab them before they sell out again. Shop now at mcstore.com.ng' },
+  welcome: { title:'👋 We Miss You at MC Store!', msg:'It\'s been a while! Come check out our latest phone accessories. Special prices for returning customers!' }
+};
+
+function applyTemplate(key) {
+  const t = templates[key];
+  document.getElementById('notifTitle').value = t.title;
+  document.getElementById('notifMessage').value = t.msg;
+  document.getElementById('notifUrl').value = 'https://mcstore.com.ng';
+}
+
+function selectAud(el, aud) {
+  document.querySelectorAll('.aud-card').forEach(c => c.classList.remove('selected'));
+  el.classList.add('selected');
+  selectedAud = aud;
+}
+
+function showToast(msg, type='info') {
+  const layer = document.getElementById('toastLayer');
+  const t = document.createElement('div');
+  t.className = `toast ${type}`;
+  const icons = { success:'fa-check-circle', error:'fa-circle-xmark', info:'fa-circle-info' };
+  t.innerHTML = `<i class="fas ${icons[type]||icons.info}"></i> ${msg}`;
+  layer.appendChild(t);
+  setTimeout(() => t.remove(), 4000);
+}
+
+function fmtAgo(d) {
+  if (!d) return '—';
+  const s = Math.floor((Date.now() - new Date(d)) / 1000);
+  if (s < 60) return 'Just now';
+  if (s < 3600) return Math.floor(s/60) + 'm ago';
+  if (s < 86400) return Math.floor(s/3600) + 'h ago';
+  return Math.floor(s/86400) + 'd ago';
+}
+
+async function loadStats() {
+  try {
+    const { data: custs } = await db.from('customers').select('uid,created_at');
+    allCustomers = custs || [];
+    document.getElementById('sTotalSubs').textContent = allCustomers.length;
+    document.getElementById('audAllCount').textContent = allCustomers.length + ' customers';
+
+    // Today's notifications
+    const today = new Date(); today.setHours(0,0,0,0);
+    const { data: notifs } = await db.from('notifs').select('id,created_at').gte('created_at', today.toISOString());
+    document.getElementById('sTotalSent').textContent = (notifs||[]).length;
+
+    const { count } = await db.from('notifs').select('id', { count:'exact', head:true });
+    document.getElementById('sTotalRead').textContent = count || 0;
+  } catch(e) { console.error(e); }
+}
+
+async function loadHistory() {
+  const wrap = document.getElementById('historyList');
+  try {
+    const { data } = await db.from('notifs')
+      .select('id,title,message,type,created_at,is_read')
+      .order('created_at', { ascending: false })
+      .limit(50);
+
+    if (!data || !data.length) {
+      wrap.innerHTML = '<div class="empty"><i class="fas fa-bell-slash"></i><p>No notifications sent yet</p></div>';
+      return;
+    }
+
+    const iconMap = { broadcast:'fa-bullhorn', order:'fa-box', promo:'fa-tag', alert:'fa-triangle-exclamation', admin:'fa-paper-plane' };
+    const clsMap  = { broadcast:'nt-broadcast', order:'nt-order', promo:'nt-promo', alert:'nt-alert', admin:'nt-broadcast' };
+
+    wrap.innerHTML = data.map(n => `
+      <div class="notif-card">
+        <div class="notif-head">
+          <div class="notif-type-icon ${clsMap[n.type]||'nt-broadcast'}">
+            <i class="fas ${iconMap[n.type]||'fa-paper-plane'}"></i>
+          </div>
+          <div class="notif-info">
+            <div class="notif-title">${n.title||'Notification'}</div>
+            <div class="notif-body">${n.message||''}</div>
+          </div>
+        </div>
+        <div class="notif-meta">
+          <span class="notif-badge nb-all">📢 Broadcast</span>
+          <span class="notif-time">${fmtAgo(n.created_at)}</span>
+        </div>
+      </div>`).join('');
+  } catch(e) {
+    wrap.innerHTML = '<div class="empty"><i class="fas fa-triangle-exclamation"></i><p>Could not load history</p></div>';
+  }
+}
+
+async function sendNotification() {
+  const title   = document.getElementById('notifTitle').value.trim();
+  const message = document.getElementById('notifMessage').value.trim();
+  const url     = document.getElementById('notifUrl').value.trim();
+
+  if (!title) { showToast('Please enter a title!', 'error'); return; }
+  if (!message) { showToast('Please enter a message!', 'error'); return; }
+
+  const btn = document.getElementById('sendBtn');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Sending...';
+
+  try {
+    // Get target UIDs based on audience
+    let targetUids = [];
+
+    if (selectedAud === 'all') {
+      targetUids = allCustomers.map(c => c.uid);
+    } else if (selectedAud === 'buyers') {
+      const { data: orders } = await db.from('orders').select('customer_id');
+      const buyerIds = [...new Set((orders||[]).map(o => o.customer_id))];
+      targetUids = buyerIds;
+    } else if (selectedAud === 'nobuy') {
+      const { data: orders } = await db.from('orders').select('customer_id');
+      const buyerIds = new Set((orders||[]).map(o => o.customer_id));
+      targetUids = allCustomers.filter(c => !buyerIds.has(c.uid)).map(c => c.uid);
+    } else if (selectedAud === 'wishlist') {
+      const { data: wishlists } = await db.from('wishlists').select('customer_id');
+      targetUids = [...new Set((wishlists||[]).map(w => w.customer_id))];
+    }
+
+    if (!targetUids.length) {
+      showToast('No customers found for this audience!', 'error');
+      btn.disabled = false;
+      btn.innerHTML = '<i class="fas fa-paper-plane"></i> Send Notification';
+      return;
+    }
+
+    // Save to notifs table for in-app notifications
+    const rows = targetUids.map(uid => ({
+      uid, title, message,
+      type: 'admin',
+      is_read: false,
+      created_at: new Date().toISOString()
+    }));
+
+    const { error } = await db.from('notifs').insert(rows);
+    if (error) throw error;
+
+    // Also try push API
+    try {
+      await fetch('/api/push', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action:'send', uids: targetUids, title, message, type:'admin', url })
+      });
+    } catch(e) { /* Push API optional */ }
+
+    showToast(`✅ Sent to ${targetUids.length} customers!`, 'success');
+
+    // Reset form
+    document.getElementById('notifTitle').value = '';
+    document.getElementById('notifMessage').value = '';
+    document.getElementById('notifUrl').value = '';
+
+    await loadStats();
+
+  } catch(e) {
+    showToast('Failed to send: ' + e.message, 'error');
+  }
+
+  btn.disabled = false;
+  btn.innerHTML = '<i class="fas fa-paper-plane"></i> Send Notification';
+}
+
+// Tab switching
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    tab.classList.add('active');
+    const id = tab.dataset.tab;
+    document.getElementById('tab-compose').style.display = id === 'compose' ? 'block' : 'none';
+    document.getElementById('tab-history').style.display = id === 'history' ? 'block' : 'none';
+    if (id === 'history') loadHistory();
+  });
+});
+
+loadStats();
+</script>
+</body>
+</html>

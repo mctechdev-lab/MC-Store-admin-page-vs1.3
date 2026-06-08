@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
+<title>Wishlists & Carts — MC Store Admin</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+:root{
+  --blue:#1a56db;--blue-dk:#1347c8;--blue-lt:#eff6ff;--blue-md:#dbeafe;
+  --white:#fff;--bg:#f0f7ff;--text:#0f172a;--muted:#64748b;--border:#e2e8f0;
+  --green:#16a34a;--green-lt:#dcfce7;--red:#dc2626;--red-lt:#fef2f2;
+  --gold:#f59e0b;--gold-lt:#fefce8;--purple:#7c3aed;--purple-lt:#f5f3ff;
+  --orange:#f97316;--orange-lt:#fff7ed;
+}
+html,body{min-height:100vh;background:var(--bg);font-family:'DM Sans',sans-serif;color:var(--text);}
+@keyframes spin{to{transform:rotate(360deg);}}
+@keyframes fadeUp{from{opacity:0;transform:translateY(8px);}to{opacity:1;transform:none;}}
+
+.topbar{position:sticky;top:0;z-index:50;background:var(--white);border-bottom:1.5px solid var(--border);padding:0 1rem;height:56px;display:flex;align-items:center;gap:.75rem;box-shadow:0 2px 8px rgba(26,86,219,.07);}
+.topbar-title{font-weight:800;font-size:1rem;flex:1;}
+.topbar-title span{color:var(--blue);}
+.icon-btn{width:34px;height:34px;border-radius:10px;background:var(--bg);border:1.5px solid var(--border);display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--muted);transition:all .2s;}
+.icon-btn:hover{background:var(--blue-lt);color:var(--blue);border-color:var(--blue);}
+
+.tabs{display:flex;gap:0;background:var(--white);border-bottom:1.5px solid var(--border);padding:0 1rem;}
+.tab{flex:1;padding:.75rem .5rem;text-align:center;font-size:.78rem;font-weight:700;color:var(--muted);cursor:pointer;border-bottom:3px solid transparent;transition:all .2s;}
+.tab.active{color:var(--blue);border-bottom-color:var(--blue);}
+
+/* STATS */
+.stats-row{display:grid;grid-template-columns:repeat(3,1fr);gap:.5rem;padding:.85rem 1rem;}
+.stat-box{background:var(--white);border:1.5px solid var(--border);border-radius:12px;padding:.7rem .5rem;text-align:center;}
+.stat-num{font-size:1.1rem;font-weight:800;}
+.stat-lbl{font-size:.6rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-top:2px;}
+.s-wish .stat-num{color:var(--red);}
+.s-cart .stat-num{color:var(--orange);}
+.s-val  .stat-num{color:var(--green);font-size:.9rem;}
+
+/* PRODUCT RANKING */
+.rank-section{margin:0 1rem 1rem;}
+.section-title{font-size:.75rem;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:.6rem;display:flex;align-items:center;justify-content:space-between;}
+.rank-card{background:var(--white);border:1.5px solid var(--border);border-radius:14px;overflow:hidden;}
+.rank-row{display:flex;align-items:center;gap:.75rem;padding:.75rem 1rem;border-bottom:1px solid var(--border);}
+.rank-row:last-child{border-bottom:none;}
+.rank-num{width:22px;height:22px;border-radius:50%;background:var(--bg);display:flex;align-items:center;justify-content:center;font-size:.7rem;font-weight:800;color:var(--muted);flex-shrink:0;}
+.rank-num.gold{background:var(--gold-lt);color:var(--gold);}
+.rank-num.silver{background:#f1f5f9;color:#64748b;}
+.rank-num.bronze{background:#fef3c7;color:#92400e;}
+.rank-img{width:38px;height:38px;border-radius:8px;object-fit:cover;background:var(--bg);flex-shrink:0;}
+.rank-info{flex:1;min-width:0;}
+.rank-name{font-size:.82rem;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.rank-price{font-size:.72rem;color:var(--blue);font-weight:700;margin-top:1px;}
+.rank-count{font-size:.75rem;font-weight:800;color:var(--muted);flex-shrink:0;text-align:right;}
+.rank-count span{display:block;font-size:.62rem;font-weight:600;}
+
+/* CUSTOMER WISHLIST */
+.customer-list{padding:0 1rem 5rem;}
+.cust-card{background:var(--white);border:1.5px solid var(--border);border-radius:14px;margin-bottom:.7rem;animation:fadeUp .3s ease;overflow:hidden;}
+.cust-head{display:flex;align-items:center;gap:.75rem;padding:.85rem 1rem;cursor:pointer;}
+.cust-avatar{width:40px;height:40px;border-radius:50%;background:linear-gradient(135deg,var(--blue),#6366f1);display:flex;align-items:center;justify-content:center;color:white;font-weight:800;font-size:.95rem;flex-shrink:0;}
+.cust-info{flex:1;min-width:0;}
+.cust-name{font-size:.88rem;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.cust-email{font-size:.7rem;color:var(--muted);}
+.cust-count{font-size:.75rem;font-weight:800;color:var(--red);flex-shrink:0;}
+.cust-chevron{color:var(--muted);font-size:.72rem;flex-shrink:0;transition:transform .25s;}
+.cust-card.open .cust-chevron{transform:rotate(180deg);}
+
+.cust-items{display:none;border-top:1px solid var(--border);padding:.75rem 1rem;}
+.cust-card.open .cust-items{display:block;}
+.wish-item{display:flex;align-items:center;gap:.6rem;padding:.5rem 0;border-bottom:1px solid var(--border);}
+.wish-item:last-child{border-bottom:none;}
+.wish-img{width:40px;height:40px;border-radius:8px;object-fit:cover;background:var(--bg);flex-shrink:0;}
+.wish-name{font-size:.8rem;font-weight:600;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.wish-price{font-size:.78rem;font-weight:800;color:var(--blue);flex-shrink:0;}
+
+/* ABANDONED CARTS */
+.cart-card{background:var(--white);border:1.5px solid var(--orange);border-radius:14px;margin-bottom:.7rem;animation:fadeUp .3s ease;overflow:hidden;}
+.cart-head{display:flex;align-items:center;gap:.75rem;padding:.85rem 1rem;cursor:pointer;}
+.cart-badge{background:var(--orange-lt);color:var(--orange);font-size:.65rem;font-weight:700;padding:2px 8px;border-radius:20px;flex-shrink:0;}
+.cart-val{font-size:.88rem;font-weight:800;color:var(--orange);flex-shrink:0;}
+.nudge-btn{padding:6px 12px;background:var(--orange);color:white;border:none;border-radius:8px;font-size:.72rem;font-weight:700;cursor:pointer;font-family:'DM Sans',sans-serif;transition:all .2s;flex-shrink:0;}
+.nudge-btn:hover{background:#ea6b00;}
+
+/* EMPTY */
+.empty{text-align:center;padding:3rem 1rem;color:var(--muted);}
+.empty i{font-size:2.5rem;margin-bottom:.75rem;opacity:.3;}
+.empty p{font-size:.85rem;}
+
+/* TOAST */
+.toast-layer{position:fixed;top:18px;left:50%;transform:translateX(-50%);z-index:9999;pointer-events:none;display:flex;flex-direction:column;align-items:center;gap:8px;width:min(380px,92vw);}
+.toast{width:100%;display:flex;align-items:center;gap:10px;padding:12px 16px;border-radius:12px;background:var(--white);border:1.5px solid var(--border);box-shadow:0 8px 32px rgba(0,0,0,.12);font-size:.85rem;font-weight:600;pointer-events:all;animation:toastIn .3s cubic-bezier(.34,1.56,.64,1) both;}
+@keyframes toastIn{from{opacity:0;transform:translateY(-16px) scale(.94);}to{opacity:1;transform:none;}}
+.toast.success{border-color:#bbf7d0;color:var(--green);}
+.toast.error{border-color:#fecaca;color:var(--red);}
+.toast.info{border-color:var(--blue-md);color:var(--blue);}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-title">❤️ <span>Wishlists & Carts</span></div>
+  <div class="icon-btn" onclick="loadAll()" title="Refresh"><i class="fas fa-rotate-right"></i></div>
+</div>
+
+<div class="tabs">
+  <div class="tab active" data-tab="wishlist">❤️ Wishlists</div>
+  <div class="tab" data-tab="carts">🛒 Abandoned Carts</div>
+  <div class="tab" data-tab="popular">🔥 Popular</div>
+</div>
+
+<!-- WISHLIST TAB -->
+<div id="tab-wishlist">
+  <div class="stats-row">
+    <div class="stat-box s-wish"><div class="stat-num" id="sWishCount">—</div><div class="stat-lbl">Wishlisted</div></div>
+    <div class="stat-box s-cart"><div class="stat-num" id="sCartCount">—</div><div class="stat-lbl">Abandoned</div></div>
+    <div class="stat-box s-val"><div class="stat-num" id="sCartVal">—</div><div class="stat-lbl">Cart Value</div></div>
+  </div>
+  <div class="customer-list" id="wishlistContainer">
+    <div class="empty"><i class="fas fa-heart"></i><p>Loading wishlists...</p></div>
+  </div>
+</div>
+
+<!-- ABANDONED CARTS TAB -->
+<div id="tab-carts" style="display:none;">
+  <div class="customer-list" id="cartsContainer">
+    <div class="empty"><i class="fas fa-cart-shopping"></i><p>Loading abandoned carts...</p></div>
+  </div>
+</div>
+
+<!-- POPULAR PRODUCTS TAB -->
+<div id="tab-popular" style="display:none;">
+  <div class="rank-section" style="margin-top:1rem;">
+    <div class="section-title">Most Wishlisted Products</div>
+    <div class="rank-card" id="popularList">
+      <div class="empty"><i class="fas fa-fire"></i><p>Loading...</p></div>
+    </div>
+  </div>
+</div>
+
+<div class="toast-layer" id="toastLayer"></div>
+
+<script>
+const SB_URL = 'https://kswikkoqfpyxuurzxail.supabase.co';
+const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imtzd2lra29xZnB5eHV1cnp4YWlsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEzNjEzMDQsImV4cCI6MjA4NjkzNzMwNH0.uuoSKWOTeXot1HJys0EO9OcIRBL0mKrNHIUHIAPCpZ4';
+const db = supabase.createClient(SB_URL, SB_KEY);
+
+function fmt(n){ return '₦' + Number(n||0).toLocaleString('en-NG'); }
+function esc(s){ const d=document.createElement('div');d.textContent=s||'';return d.innerHTML; }
+function fmtAgo(d){
+  if(!d) return '—';
+  const s=Math.floor((Date.now()-new Date(d))/1000);
+  if(s<60) return 'Just now';
+  if(s<3600) return Math.floor(s/60)+'m ago';
+  if(s<86400) return Math.floor(s/3600)+'h ago';
+  return Math.floor(s/86400)+'d ago';
+}
+
+function showToast(msg, type='info'){
+  const layer=document.getElementById('toastLayer');
+  const t=document.createElement('div');
+  t.className=`toast ${type}`;
+  const icons={success:'fa-check-circle',error:'fa-circle-xmark',info:'fa-circle-info'};
+  t.innerHTML=`<i class="fas ${icons[type]||icons.info}"></i> ${msg}`;
+  layer.appendChild(t);
+  setTimeout(()=>t.remove(),4000);
+}
+
+async function loadWishlists(){
+  const wrap = document.getElementById('wishlistContainer');
+  try {
+    // Try to fetch from wishlists table
+    const { data: wishlists, error } = await db
+      .from('wishlists')
+      .select('customer_id, product_id, created_at, products(id,name,title,price,images,image_url), customers(uid,full_name,email)')
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+
+    document.getElementById('sWishCount').textContent = (wishlists||[]).length;
+
+    if (!wishlists || !wishlists.length) {
+      wrap.innerHTML = '<div class="empty"><i class="fas fa-heart"></i><p>No wishlisted products yet</p></div>';
+      return;
+    }
+
+    // Group by customer
+    const byCustomer = {};
+    wishlists.forEach(w => {
+      const cid = w.customer_id;
+      if (!byCustomer[cid]) {
+        byCustomer[cid] = {
+          customer: w.customers || { full_name: 'Customer', email: '' },
+          items: []
+        };
+      }
+      if (w.products) byCustomer[cid].items.push(w.products);
+    });
+
+    const colors = ['#1a56db','#16a34a','#f59e0b','#7c3aed','#f97316','#dc2626'];
+    let html = '';
+    Object.entries(byCustomer).forEach(([cid, data], i) => {
+      const name = data.customer?.full_name || data.customer?.email || 'Customer';
+      const letter = (name[0]||'?').toUpperCase();
+      const itemsHtml = data.items.map(p => {
+        const img = p?.image_url || (Array.isArray(p?.images) ? p.images[0] : null) || '';
+        const pname = p?.name || p?.title || 'Product';
+        return `<div class="wish-item">
+          ${img ? `<img class="wish-img" src="${esc(img)}" alt="">` : `<div class="wish-img" style="display:flex;align-items:center;justify-content:center"><i class="fas fa-image" style="color:var(--muted)"></i></div>`}
+          <div class="wish-name">${esc(pname)}</div>
+          <div class="wish-price">${fmt(p?.price)}</div>
+        </div>`;
+      }).join('');
+
+      html += `<div class="cust-card" id="wc-${i}">
+        <div class="cust-head" onclick="toggleCard('wc-${i}')">
+          <div class="cust-avatar" style="background:${colors[i%colors.length]}">${esc(letter)}</div>
+          <div class="cust-info">
+            <div class="cust-name">${esc(name)}</div>
+            <div class="cust-email">${esc(data.customer?.email||'')}</div>
+          </div>
+          <div class="cust-count">❤️ ${data.items.length}</div>
+          <i class="fas fa-chevron-down cust-chevron"></i>
+        </div>
+        <div class="cust-items">${itemsHtml}</div>
+      </div>`;
+    });
+
+    wrap.innerHTML = html;
+  } catch(e) {
+    wrap.innerHTML = `<div class="empty"><i class="fas fa-triangle-exclamation"></i><p>Could not load wishlists<br><small>${e.message}</small></p></div>`;
+  }
+}
+
+async function loadAbandonedCarts(){
+  const wrap = document.getElementById('cartsContainer');
+  try {
+    const { data: carts, error } = await db
+      .from('carts')
+      .select('id,customer_id,items,total,updated_at,customers(full_name,email)')
+      .order('updated_at', { ascending: false })
+      .limit(50);
+
+    if (error) throw error;
+
+    // Only show carts older than 30 minutes
+    const abandoned = (carts||[]).filter(c => {
+      const age = Date.now() - new Date(c.updated_at);
+      return age > 30 * 60 * 1000;
+    });
+
+    document.getElementById('sCartCount').textContent = abandoned.length;
+    const totalVal = abandoned.reduce((s,c) => s + Number(c.total||0), 0);
+    document.getElementById('sCartVal').textContent = '₦' + (totalVal/1000).toFixed(0) + 'k';
+
+    if (!abandoned.length) {
+      wrap.innerHTML = '<div class="empty"><i class="fas fa-cart-shopping"></i><p>No abandoned carts! 🎉<br>All customers are completing their orders!</p></div>';
+      return;
+    }
+
+    const colors = ['#1a56db','#16a34a','#f59e0b','#7c3aed','#f97316','#dc2626'];
+    wrap.innerHTML = abandoned.map((c,i) => {
+      const name = c.customers?.full_name || c.customers?.email || 'Customer';
+      const letter = (name[0]||'?').toUpperCase();
+      const items = typeof c.items === 'string' ? JSON.parse(c.items||'[]') : (c.items||[]);
+      return `<div class="cart-card">
+        <div class="cart-head" style="cursor:default">
+          <div class="cust-avatar" style="background:${colors[i%colors.length]};width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:white;font-weight:800;font-size:.95rem;flex-shrink:0">${esc(letter)}</div>
+          <div class="cust-info">
+            <div class="cust-name">${esc(name)}</div>
+            <div class="cust-email">${items.length} item${items.length!==1?'s':''} · Abandoned ${fmtAgo(c.updated_at)}</div>
+          </div>
+          <div class="cart-val">${fmt(c.total)}</div>
+        </div>
+        <div style="padding:.5rem 1rem .85rem;display:flex;gap:.5rem;align-items:center;">
+          <span class="cart-badge">⚠️ Abandoned</span>
+          <button class="nudge-btn" onclick="nudgeCart('${c.customer_id}','${esc(name)}')">
+            <i class="fas fa-bell"></i> Send Reminder
+          </button>
+        </div>
+      </div>`;
+    }).join('');
+  } catch(e) {
+    wrap.innerHTML = `<div class="empty"><i class="fas fa-triangle-exclamation"></i><p>Could not load carts<br><small>${e.message}</small></p></div>`;
+  }
+}
+
+async function loadPopular(){
+  const wrap = document.getElementById('popularList');
+  try {
+    const { data: wishlists } = await db.from('wishlists').select('product_id, products(id,name,title,price,image_url,images)');
+    if (!wishlists || !wishlists.length) {
+      wrap.innerHTML = '<div class="empty"><i class="fas fa-fire"></i><p>No wishlist data yet</p></div>';
+      return;
+    }
+
+    // Count by product
+    const counts = {};
+    wishlists.forEach(w => {
+      const id = w.product_id;
+      if (!counts[id]) counts[id] = { product: w.products, count: 0 };
+      counts[id].count++;
+    });
+
+    const sorted = Object.values(counts).sort((a,b) => b.count - a.count).slice(0, 10);
+    const rankClasses = ['gold','silver','bronze'];
+
+    wrap.innerHTML = sorted.map((item, i) => {
+      const p = item.product || {};
+      const img = p.image_url || (Array.isArray(p.images) ? p.images[0] : null) || '';
+      const name = p.name || p.title || 'Product';
+      return `<div class="rank-row">
+        <div class="rank-num ${rankClasses[i]||''}">${i+1}</div>
+        ${img ? `<img class="rank-img" src="${esc(img)}" alt="">` : `<div class="rank-img" style="display:flex;align-items:center;justify-content:center"><i class="fas fa-image" style="color:var(--muted)"></i></div>`}
+        <div class="rank-info">
+          <div class="rank-name">${esc(name)}</div>
+          <div class="rank-price">${fmt(p.price)}</div>
+        </div>
+        <div class="rank-count">❤️ ${item.count}<span>wishlisted</span></div>
+      </div>`;
+    }).join('');
+  } catch(e) {
+    wrap.innerHTML = `<div class="empty"><i class="fas fa-triangle-exclamation"></i><p>Could not load data</p></div>`;
+  }
+}
+
+function toggleCard(id){
+  document.getElementById(id).classList.toggle('open');
+}
+
+async function nudgeCart(customerId, name){
+  try {
+    await db.from('notifs').insert([{
+      uid: customerId,
+      title: '🛒 You left something behind!',
+      message: `Hey ${name.split(' ')[0]}! You have items in your cart. Complete your order now before they sell out!`,
+      type: 'admin',
+      is_read: false
+    }]);
+    showToast(`Reminder sent to ${name}!`, 'success');
+  } catch(e) {
+    showToast('Failed to send reminder', 'error');
+  }
+}
+
+// Tab switching
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    tab.classList.add('active');
+    const id = tab.dataset.tab;
+    ['wishlist','carts','popular'].forEach(t => {
+      document.getElementById(`tab-${t}`).style.display = t===id ? 'block' : 'none';
+    });
+    if (id === 'carts') loadAbandonedCarts();
+    if (id === 'popular') loadPopular();
+  });
+});
+
+async function loadAll(){
+  await loadWishlists();
+  await loadAbandonedCarts();
+}
+
+loadWishlists();
+</script>
+</body>
+</html>
