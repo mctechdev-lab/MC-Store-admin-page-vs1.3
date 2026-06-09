@@ -462,11 +462,23 @@ async function handlePublish(){
       const ext=file.name.split('.').pop().toLowerCase()||'jpg';
       const fileName=`listings/admin/${Date.now()}_${id}.${ext}`;
       setProgress(Math.round(((i+0.3)/photos.length)*80),`Uploading photo ${i+1} of ${photos.length}…`);
-      const {error:upErr}=await dbAdmin.storage.from('product-images').upload(fileName,file,{cacheControl:'3600',upsert:true});
-      if(upErr) throw new Error(`Photo ${i+1} upload failed: ${upErr.message}`);
-      const {data:u}=dbAdmin.storage.from('product-images').getPublicUrl(fileName);
-      if(!u?.publicUrl) throw new Error(`Could not get URL for photo ${i+1}`);
-      imageUrls.push(u.publicUrl);
+        // Convert file to base64 for Cloudinary upload
+      const base64 = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+
+      // Upload via serverless function to Cloudinary
+      const uploadRes = await fetch('/api/upload-image', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ image: base64, fileName: file.name })
+      });
+      const uploadData = await uploadRes.json();
+      if (!uploadData.ok) throw new Error(`Photo ${i+1} upload failed: ${uploadData.error}`);
+      imageUrls.push(uploadData.url);
       setProgress(Math.round(((i+1)/photos.length)*80),`Photo ${i+1} uploaded ✓`);
     }
 
