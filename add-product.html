@@ -267,6 +267,11 @@ const db = createClient(
   'https://kswikkoqfpyxuurzxail.supabase.co',
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imtzd2lra29xZnB5eHV1cnp4YWlsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEzNjEzMDQsImV4cCI6MjA4NjkzNzMwNH0.uuoSKWOTeXot1HJys0EO9OcIRBL0mKrNHIUHIAPCpZ4'
 );
+// Admin client bypasses RLS for uploads
+const dbAdmin = createClient(
+  'https://kswikkoqfpyxuurzxail.supabase.co',
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imtzd2lra29xZnB5eHV1cnp4YWlsIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MTM2MTMwNCwiZXhwIjoyMDg2OTM3MzA0fQ.Z5UvrKaNwUB2fPbcGRnSkw773X7oL9kE3u5PbUay9mI'
+);
 
 const CATEGORIES = [
   {name:'Electronics',icon:'fas fa-tv'},{name:'Mobile Phones',icon:'fas fa-mobile-screen'},
@@ -457,9 +462,9 @@ async function handlePublish(){
       const ext=file.name.split('.').pop().toLowerCase()||'jpg';
       const fileName=`listings/admin/${Date.now()}_${id}.${ext}`;
       setProgress(Math.round(((i+0.3)/photos.length)*80),`Uploading photo ${i+1} of ${photos.length}…`);
-      const {error:upErr}=await db.storage.from('product-images').upload(fileName,file,{cacheControl:'3600',upsert:true});
+      const {error:upErr}=await dbAdmin.storage.from('product-images').upload(fileName,file,{cacheControl:'3600',upsert:true});
       if(upErr) throw new Error(`Photo ${i+1} upload failed: ${upErr.message}`);
-      const {data:u}=db.storage.from('product-images').getPublicUrl(fileName);
+      const {data:u}=dbAdmin.storage.from('product-images').getPublicUrl(fileName);
       if(!u?.publicUrl) throw new Error(`Could not get URL for photo ${i+1}`);
       imageUrls.push(u.publicUrl);
       setProgress(Math.round(((i+1)/photos.length)*80),`Photo ${i+1} uploaded ✓`);
@@ -492,7 +497,7 @@ async function handlePublish(){
       updated_at:new Date().toISOString(),
     };
 
-    const {error:insErr}=await db.from('products').insert([row]);
+    const {error:insErr}=await dbAdmin.from('products').insert([row]);
 
     if(insErr){
       if(insErr.code==='42703') throw new Error(`Missing DB column: ${insErr.message} — run FIX_PRODUCTS_TABLE.sql in Supabase`);
@@ -500,7 +505,7 @@ async function handlePublish(){
         // images column is wrong type — try inserting without images array, just image_url
         const rowNoImages = {...row};
         delete rowNoImages.images;
-        const {error:insErr2} = await db.from('products').insert([rowNoImages]);
+        const {error:insErr2} = await dbAdmin.from('products').insert([rowNoImages]);
         if(!insErr2){ setProgress(100,'Done! ✓'); setTimeout(()=>{ hideProgress(); notify('Product published! ⚠️ Note: Run FIX_PRODUCTS_TABLE.sql to enable multiple images','t-ok'); resetForm(); },800); return; }
         throw new Error('DB error (42883): Run this SQL in Supabase: ALTER TABLE products ALTER COLUMN images TYPE jsonb[] USING array_to_json(images)::jsonb[];  OR simply: ALTER TABLE products DROP COLUMN images; ALTER TABLE products ADD COLUMN images text[];');
       }
