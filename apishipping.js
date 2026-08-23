@@ -13,6 +13,14 @@ const SHIPBUBBLE_KEY    = process.env.SHIPBUBBLE_API_KEY    || "sb_prod_4e080eb6
 const SHIPBUBBLE_BASE   = "https://api.shipbubble.com/v1";
 const SENDER_STATE      = "Oyo"; // MC Store is in Oyo state
 
+// Supabase — used to look up a vendor's own ship-from address
+const SUPA_URL  = "https://kswikkoqfpyxuurzxail.supabase.co";
+const SUPA_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imtzd2lra29xZnB5eHV1cnp4YWlsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEzNjEzMDQsImV4cCI6MjA4NjkzNzMwNH0.uuoSKWOTeXot1HJys0EO9OcIRBL0mKrNHIUHIAPCpZ4";
+
+// In-memory cache of validated vendor sender codes (also persisted to
+// vendors.shipbubble_address_code so it survives redeploys)
+const vendorSenderCache = {};
+
 // Raw HTTP call
 async function sb(path, body, method = "POST") {
   const url = `${SHIPBUBBLE_BASE}${path}`;
@@ -91,6 +99,75 @@ function buildItems(items) {
   }));
 }
 
+// ── Fetch a vendor's ship-from address from Supabase ──
+async function getVendorAddress(vendorId) {
+  try {
+    const r = await fetch(
+      `${SUPA_URL}/rest/v1/vendors?uid=eq.${encodeURIComponent(vendorId)}&select=shop_name,address,ship_from_city,state,lga,whatsapp,shipbubble_address_code&limit=1`,
+      { headers: { apikey: SUPA_ANON, Authorization: `Bearer ${SUPA_ANON}` } }
+    );
+    const rows = await r.json();
+    return rows?.[0] || null;
+  } catch (e) {
+    console.error("[SB] getVendorAddress failed:", e.message);
+    return null;
+  }
+}
+
+// ── Save a validated address_code back onto the vendor row so we don't
+//    re-validate the same address with Shipbubble on every future order ──
+async function cacheVendorAddressCode(vendorId, code) {
+  try {
+    await fetch(`${SUPA_URL}/rest/v1/vendors?uid=eq.${encodeURIComponent(vendorId)}`, {
+      method: "PATCH",
+      headers: { apikey: SUPA_ANON, Authorization: `Bearer ${SUPA_ANON}`, "Content-Type": "application/json", Prefer: "return=minimal" },
+      body: JSON.stringify({ shipbubble_address_code: String(code) })
+    });
+  } catch (e) { /* non-fatal — in-memory cache still works this run */ }
+}
+
+// ── Resolve the correct sender_address_code for an order/shipment ──
+//    vendorId present → use that vendor's own address as sender
+//    vendorId null     → MC Store's own inventory, use SHIPBUBBLE_SENDER_CODE
+async function getSenderCodeFor(vendorId) {
+  if (!vendorId) {
+    const envCode = process.env.SHIPBUBBLE_SENDER_CODE || "";
+    return { code: envCode || null, error: envCode ? null : "Delivery not yet configured. The store admin needs to set up the sender address." };
+  }
+
+  if (vendorSenderCache[vendorId]) return { code: vendorSenderCache[vendorId], error: null };
+
+  const vendor = await getVendorAddress(vendorId);
+  if (!vendor) return { code: null, error: "Vendor not found" };
+
+  if (vendor.shipbubble_address_code) {
+    vendorSenderCache[vendorId] = vendor.shipbubble_address_code;
+    return { code: vendorSenderCache[vendorId], error: null };
+  }
+
+  if (!vendor.address || !vendor.ship_from_city || !vendor.state) {
+    return { code: null, error: `${vendor.shop_name || "This vendor"} hasn't finished setting up a shipping address yet` };
+  }
+
+  const reg = await registerAddress({
+    name: vendor.shop_name || "Vendor",
+    email: "vendor@mcstore.ng",
+    phone: vendor.whatsapp,
+    address: vendor.address,
+    city: vendor.ship_from_city,
+    state: vendor.state
+  });
+
+  if (!reg.ok || !reg.code) {
+    const msg = reg.raw?.data?.message || reg.raw?.data?.errors?.[0] || "Could not validate vendor address";
+    return { code: null, error: `Shipping setup error for ${vendor.shop_name || "this vendor"}: ${msg}` };
+  }
+
+  vendorSenderCache[vendorId] = reg.code;
+  cacheVendorAddressCode(vendorId, reg.code); // fire-and-forget
+  return { code: reg.code, error: null };
+}
+
 // ── MAIN HANDLER ──
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin",  "*");
@@ -108,14 +185,15 @@ export default async function handler(req, res) {
   //  3. Call fetch_rates with both codes + category
   // ══════════════════════════════════════════════════
   if (action === "getRates") {
-    const { recipientAddress, items = [], totalWeight = 0.5 } = payload;
+    const { recipientAddress, items = [], totalWeight = 0.5, vendor_id = null } = payload;
 
-    // Step 1: Sender code — must be set in Vercel env vars via admin panel
-    const senderCode = process.env.SHIPBUBBLE_SENDER_CODE || "";
+    // Step 1: Sender code — vendor's own address if this is a vendor's items,
+    // otherwise MC Store's own address (env var)
+    const { code: senderCode, error: senderErr } = await getSenderCodeFor(vendor_id);
     if (!senderCode) {
       return res.status(200).json({
         ok:    false,
-        error: "Delivery not yet configured. The store admin needs to set up the sender address. Please contact MC Store support.",
+        error: senderErr || "Delivery not yet configured. Please contact MC Store support.",
         setup_needed: true
       });
     }
@@ -207,8 +285,8 @@ export default async function handler(req, res) {
     const { order } = payload;
     if (!order) return res.status(400).json({ ok: false, error: "No order provided" });
 
-    const senderCode = process.env.SHIPBUBBLE_SENDER_CODE || "";
-    if (!senderCode) return res.status(200).json({ ok: false, error: "SHIPBUBBLE_SENDER_CODE not set in Vercel env vars" });
+    const { code: senderCode, error: senderErr } = await getSenderCodeFor(order.vendor_id || null);
+    if (!senderCode) return res.status(200).json({ ok: false, error: senderErr || "Could not resolve sender address for this order" });
 
     const items = (() => {
       try { return typeof order.items === "string" ? JSON.parse(order.items) : (order.items || []); }
