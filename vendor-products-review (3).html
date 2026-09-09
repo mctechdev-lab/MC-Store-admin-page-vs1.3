@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Vendor Products Review</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+:root{
+  --blue:#1a56db;--blue-lt:#eff6ff;--blue-md:#dbeafe;--blue-bd:rgba(26,86,219,.20);
+  --gold:#f59e0b;--gold-lt:#fef3c7;--gold-bd:#fde68a;
+  --green:#16a34a;--green-lt:#dcfce7;--green-bd:#bbf7d0;
+  --red:#dc2626;--red-lt:#fee2e2;--red-bd:#fecaca;
+  --amber:#f59e0b;--amber-lt:#fef3c7;--amber-bd:#fde68a;
+  --bg:#f0f7ff;--surface:#fff;--border:#e2e8f0;
+  --ink:#0f172a;--muted:#64748b;--muted2:#94a3b8;
+  --font:'DM Sans',system-ui,sans-serif;
+}
+body{font-family:var(--font);background:var(--bg);color:var(--ink);min-height:100vh;}
+button{cursor:pointer;font-family:inherit;border:none;outline:none;background:none;}
+img{display:block;max-width:100%;}
+
+.page{padding:14px;max-width:960px;margin:0 auto;}
+
+/* TOOLBAR */
+.toolbar{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;}
+.search-box{flex:1;min-width:160px;display:flex;align-items:center;gap:8px;background:var(--surface);border:1.5px solid var(--border);border-radius:10px;padding:9px 12px;}
+.search-box i{font-size:12px;color:var(--muted2);flex-shrink:0;}
+.search-box input{background:none;border:none;outline:none;font-size:13px;color:var(--ink);width:100%;font-family:var(--font);}
+.search-box input::placeholder{color:var(--muted2);}
+.filter-select{padding:9px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface);font-size:13px;font-weight:600;color:var(--ink);outline:none;cursor:pointer;font-family:var(--font);}
+.btn-refresh{padding:9px 14px;border-radius:10px;background:var(--blue-lt);border:1px solid var(--blue-bd);color:var(--blue);font-size:13px;font-weight:700;display:flex;align-items:center;gap:6px;transition:background .2s;}
+.btn-refresh:hover{background:var(--blue-md);}
+
+/* STATS */
+.stats-row{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:14px;}
+@media(min-width:500px){.stats-row{grid-template-columns:repeat(4,1fr);}}
+.stat-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:12px;box-shadow:0 2px 8px rgba(15,23,42,.04);}
+.stat-card .sn{font-size:24px;font-weight:900;line-height:1;margin-bottom:2px;}
+.stat-card .sl{font-size:10px;font-weight:700;color:var(--muted2);text-transform:uppercase;letter-spacing:.06em;}
+.stat-card.pending .sn{color:var(--amber);}
+.stat-card.live .sn{color:var(--green);}
+.stat-card.rejected .sn{color:var(--red);}
+.stat-card.total .sn{color:var(--blue);}
+
+/* PRODUCT CARDS */
+.products-grid{display:grid;grid-template-columns:1fr;gap:10px;}
+@media(min-width:500px){.products-grid{grid-template-columns:repeat(2,1fr);}}
+@media(min-width:760px){.products-grid{grid-template-columns:repeat(3,1fr);}}
+
+.product-card{background:var(--surface);border:1px solid var(--border);border-radius:14px;overflow:hidden;box-shadow:0 2px 8px rgba(15,23,42,.04);transition:border-color .2s;}
+.product-card:hover{border-color:var(--blue-bd);}
+.product-card.status-pending{border-top:3px solid var(--amber);}
+.product-card.status-live{border-top:3px solid var(--green);}
+.product-card.status-paused{border-top:3px solid var(--muted2);}
+.product-card.status-rejected{border-top:3px solid var(--red);}
+
+.pc-img{width:100%;aspect-ratio:1/1;object-fit:cover;background:var(--bg);cursor:pointer;}
+.pc-img-placeholder{width:100%;aspect-ratio:1/1;background:var(--bg);display:grid;place-items:center;font-size:36px;color:var(--muted2);}
+
+.pc-body{padding:10px;}
+.pc-vendor{font-size:10px;font-weight:800;color:var(--blue);text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px;}
+.pc-name{font-weight:700;font-size:13px;color:var(--ink);margin-bottom:4px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}
+.pc-price{font-weight:900;font-size:15px;color:var(--ink);margin-bottom:4px;}
+.pc-cat{font-size:11px;color:var(--muted);margin-bottom:6px;}
+.pc-footer{display:flex;align-items:center;justify-content:space-between;}
+.pill{font-size:10px;font-weight:800;padding:3px 9px;border-radius:99px;text-transform:uppercase;letter-spacing:.05em;}
+.pill-pending{background:var(--amber-lt);color:var(--amber);border:1px solid var(--amber-bd);}
+.pill-live{background:var(--green-lt);color:var(--green);border:1px solid var(--green-bd);}
+.pill-paused{background:var(--blue-lt);color:var(--muted);border:1px solid var(--border);}
+.pill-rejected{background:var(--red-lt);color:var(--red);border:1px solid var(--red-bd);}
+
+.pc-actions{display:flex;gap:5px;margin-top:8px;}
+.btn-approve-p{flex:1;padding:8px;border-radius:8px;font-size:12px;font-weight:800;color:#fff;background:linear-gradient(135deg,var(--green),#15803d);display:flex;align-items:center;justify-content:center;gap:5px;transition:transform .15s;}
+.btn-approve-p:hover{transform:translateY(-1px);}
+.btn-approve-p:disabled{opacity:.6;transform:none;cursor:not-allowed;}
+.btn-reject-p{flex:1;padding:8px;border-radius:8px;font-size:12px;font-weight:800;color:#fff;background:linear-gradient(135deg,var(--red),#b91c1c);display:flex;align-items:center;justify-content:center;gap:5px;transition:transform .15s;}
+.btn-reject-p:hover{transform:translateY(-1px);}
+.btn-reject-p:disabled{opacity:.6;transform:none;cursor:not-allowed;}
+.btn-pause-p{padding:8px 10px;border-radius:8px;font-size:12px;font-weight:700;color:var(--muted);border:1px solid var(--border);background:var(--bg);transition:background .15s;}
+.btn-pause-p:hover{background:var(--border);}
+
+/* DETAIL MODAL */
+.modal-overlay{position:fixed;inset:0;z-index:300;background:rgba(15,23,42,.5);backdrop-filter:blur(4px);display:none;place-items:center;padding:16px;}
+.modal-overlay.show{display:grid;}
+.modal{background:var(--surface);border-radius:16px;max-width:480px;width:100%;max-height:90vh;overflow-y:auto;box-shadow:0 16px 48px rgba(0,0,0,.2);}
+.modal-head{padding:16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;}
+.modal-head h3{font-size:16px;font-weight:800;color:var(--ink);}
+.modal-close{width:32px;height:32px;border-radius:8px;background:var(--bg);display:grid;place-items:center;font-size:14px;color:var(--muted);transition:background .2s;}
+.modal-close:hover{background:var(--red-lt);color:var(--red);}
+.modal-img{width:100%;aspect-ratio:1/1;object-fit:cover;}
+.modal-body{padding:16px;}
+.modal-info-row{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);font-size:13px;}
+.modal-info-row:last-child{border-bottom:none;}
+.modal-info-row .label{color:var(--muted);font-weight:700;}
+.modal-info-row .val{font-weight:700;color:var(--ink);text-align:right;max-width:55%;}
+.modal-desc{font-size:13px;color:var(--muted);line-height:1.6;margin:10px 0;}
+.modal-actions{display:flex;gap:8px;margin-top:12px;}
+
+/* EMPTY / LOADING */
+.empty{text-align:center;padding:40px 20px;color:var(--muted);}
+.empty i{font-size:36px;color:var(--muted2);margin-bottom:10px;}
+.empty h3{font-size:15px;font-weight:800;color:var(--ink);margin-bottom:5px;}
+.empty p{font-size:13px;}
+.loading{text-align:center;padding:40px;}
+.spin{width:34px;height:34px;border:3px solid var(--blue-lt);border-top-color:var(--blue);border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 10px;}
+.loading p{font-size:13px;color:var(--muted);font-weight:600;}
+
+/* TOAST */
+.toast-layer{position:fixed;bottom:16px;right:16px;z-index:500;display:flex;flex-direction:column;gap:6px;}
+.toast{padding:10px 14px;border-radius:10px;font-size:13px;font-weight:700;display:flex;align-items:center;gap:7px;box-shadow:0 4px 16px rgba(0,0,0,.12);animation:toastIn .3s ease both;max-width:260px;}
+.toast.success{background:var(--green-lt);color:var(--green);border:1px solid var(--green-bd);}
+.toast.error{background:var(--red-lt);color:var(--red);border:1px solid var(--red-bd);}
+
+@keyframes spin{to{transform:rotate(360deg);}}
+@keyframes toastIn{from{opacity:0;transform:translateX(16px);}to{opacity:1;transform:none;}}
+</style>
+</head>
+<body>
+
+<div class="page">
+
+  <!-- STATS -->
+  <div class="stats-row">
+    <div class="stat-card pending"><div class="sn" id="sp">—</div><div class="sl">Pending Review</div></div>
+    <div class="stat-card live"><div class="sn" id="sl">—</div><div class="sl">Live</div></div>
+    <div class="stat-card rejected"><div class="sn" id="sr">—</div><div class="sl">Rejected</div></div>
+    <div class="stat-card total"><div class="sn" id="st">—</div><div class="sl">Total</div></div>
+  </div>
+
+  <!-- BACKFILL — catches any product approved before the sync fix was deployed -->
+  <div id="backfillBar" style="display:none;background:#fef3c7;border:1.5px solid #fde68a;border-radius:12px;padding:.85rem 1rem;margin-bottom:1rem;display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap">
+    <div style="font-size:.82rem;color:#92400e"><strong id="backfillCount">0</strong> live vendor product(s) never made it to the main site — probably approved before a sync fix. Click to fix them now.</div>
+    <button onclick="runBackfillSync()" id="backfillBtn" style="background:#b45309;color:#fff;border:none;border-radius:8px;padding:.5rem 1rem;font-weight:700;font-size:.8rem;cursor:pointer;white-space:nowrap">
+      <i class="fas fa-arrows-rotate"></i> Sync Missing Products
+    </button>
+  </div>
+
+  <!-- TOOLBAR -->
+  <div class="toolbar">
+    <div class="search-box">
+      <i class="fas fa-magnifying-glass"></i>
+      <input type="text" id="search" placeholder="Search products or vendors..." oninput="applyFilters()" />
+    </div>
+    <select class="filter-select" id="status-filter" onchange="applyFilters()">
+      <option value="all">All</option>
+      <option value="pending">Pending</option>
+      <option value="live">Live</option>
+      <option value="paused">Paused</option>
+      <option value="rejected">Rejected</option>
+    </select>
+    <button class="btn-refresh" onclick="loadProducts()">
+      <i class="fas fa-rotate-right"></i> Refresh
+    </button>
+  </div>
+
+  <!-- PRODUCTS -->
+  <div class="products-grid" id="products-grid">
+    <div style="grid-column:1/-1;">
+      <div class="loading"><div class="spin"></div><p>Loading products...</p></div>
+    </div>
+  </div>
+
+</div>
+
+<!-- DETAIL MODAL -->
+<div class="modal-overlay" id="modal" onclick="closeModal(event)">
+  <div class="modal" id="modal-box">
+    <div class="modal-head">
+      <h3 id="modal-title">Product Detail</h3>
+      <button class="modal-close" onclick="document.getElementById('modal').classList.remove('show')"><i class="fas fa-xmark"></i></button>
+    </div>
+    <img id="modal-img" src="" alt="" class="modal-img" style="display:none;" />
+    <div class="modal-body" id="modal-body"></div>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div class="toast-layer" id="toastLayer"></div>
+
+<script>
+const SB_URL  = "https://kswikkoqfpyxuurzxail.supabase.co";
+const SB_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imtzd2lra29xZnB5eHV1cnp4YWlsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEzNjEzMDQsImV4cCI6MjA4NjkzNzMwNH0.uuoSKWOTeXot1HJys0EO9OcIRBL0mKrNHIUHIAPCpZ4";
+
+let allProducts = [];
+let vendorMap   = {};
+
+async function sbFetch(path) {
+  const res = await fetch(`${SB_URL}/rest/v1/${path}`, {
+    headers:{ 'apikey':SB_ANON, 'Authorization':`Bearer ${SB_ANON}` }
+  });
+  return res.json();
+}
+
+async function sbPatch(path, body) {
+  const res = await fetch(`${SB_URL}/rest/v1/${path}`, {
+    method:'PATCH',
+    headers:{ 'apikey':SB_ANON, 'Authorization':`Bearer ${SB_ANON}`, 'Content-Type':'application/json', 'Prefer':'return=minimal' },
+    body: JSON.stringify(body)
+  });
+  if (!res.ok) throw new Error(await res.text());
+}
+
+async function sbPatchReturn(path, body) {
+  const res = await fetch(`${SB_URL}/rest/v1/${path}`, {
+    method:'PATCH',
+    headers:{ 'apikey':SB_ANON, 'Authorization':`Bearer ${SB_ANON}`, 'Content-Type':'application/json', 'Prefer':'return=representation' },
+    body: JSON.stringify(body)
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+async function sbPost(path, body) {
+  const res = await fetch(`${SB_URL}/rest/v1/${path}`, {
+    method:'POST',
+    headers:{ 'apikey':SB_ANON, 'Authorization':`Bearer ${SB_ANON}`, 'Content-Type':'application/json', 'Prefer':'return=representation' },
+    body: JSON.stringify(body)
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+// ── Sync an approved vendor product into the main catalog so it shows
+//    up on the homepage/catalog, not just the vendor's own shop page ──
+async function syncToMainCatalog(vp) {
+  // The `products` table's RLS only allows writes from service_role, never
+  // the public anon key — so this MUST go through a serverless function,
+  // not a direct Supabase REST call from the browser.
+  const res = await fetch('/api/sync-vendor-product', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action: 'sync', vendorProduct: vp })
+  });
+  const data = await res.json();
+  if (!data.ok) throw new Error(data.error || 'Could not sync to main catalog');
+  return data.mc_store_product_id;
+}
+
+// ── Pull a vendor product off the main catalog (rejected/paused) without
+//    deleting it, in case it's reactivated later ──
+async function unsyncFromMainCatalog(vp) {
+  if (!vp.mc_store_product_id) return;
+  const res = await fetch('/api/sync-vendor-product', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action: 'unsync', vendorProduct: vp })
+  });
+  const data = await res.json();
+  if (!data.ok) throw new Error(data.error || 'Could not update main catalog');
+}
+
+async function loadProducts() {
+  document.getElementById('products-grid').innerHTML = `<div style="grid-column:1/-1;"><div class="loading"><div class="spin"></div><p>Loading...</p></div></div>`;
+  try {
+    const [products, vendors] = await Promise.all([
+      sbFetch('vendor_products?select=*&order=created_at.desc'),
+      sbFetch('vendors?select=uid,shop_name,shop_slug&status=eq.approved')
+    ]);
+    allProducts = products || [];
+    vendorMap   = {};
+    (vendors || []).forEach(v => vendorMap[v.uid] = v);
+    updateStats();
+    applyFilters();
+  } catch(err) {
+    document.getElementById('products-grid').innerHTML = `<div style="grid-column:1/-1;"><div class="empty"><i class="fas fa-triangle-exclamation"></i><h3>Failed to load</h3><p>${err.message}</p></div></div>`;
+  }
+}
+
+function updateStats() {
+  document.getElementById('sp').textContent = allProducts.filter(p=>p.status==='pending').length;
+  document.getElementById('sl').textContent = allProducts.filter(p=>p.status==='live').length;
+  document.getElementById('sr').textContent = allProducts.filter(p=>p.status==='rejected').length;
+  document.getElementById('st').textContent = allProducts.length;
+
+  // Any product that's 'live' but never got a mc_store_product_id was
+  // approved before the sync-to-main-catalog fix existed (or the sync
+  // failed at the time) — surface a one-click fix for those.
+  const unsynced = allProducts.filter(p => p.status === 'live' && !p.mc_store_product_id);
+  document.getElementById('backfillBar').style.display = unsynced.length ? 'flex' : 'none';
+  document.getElementById('backfillCount').textContent = unsynced.length;
+}
+
+async function runBackfillSync() {
+  const btn = document.getElementById('backfillBtn');
+  const unsynced = allProducts.filter(p => p.status === 'live' && !p.mc_store_product_id);
+  if (!unsynced.length) return;
+
+  btn.disabled = true;
+  let ok = 0, failed = 0;
+  for (const vp of unsynced) {
+    try {
+      const mcId = await syncToMainCatalog(vp);
+      vp.mc_store_product_id = mcId;
+      ok++;
+    } catch (e) {
+      failed++;
+    }
+    btn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> Syncing ${ok+failed}/${unsynced.length}...`;
+  }
+
+  updateStats();
+  applyFilters();
+  btn.disabled = false;
+  btn.innerHTML = '<i class="fas fa-arrows-rotate"></i> Sync Missing Products';
+  toast(failed ? `Synced ${ok}, ${failed} failed — check SUPABASE_SERVICE_ROLE_KEY is set` : `Synced ${ok} product(s) to the main site`, failed ? 'error' : 'success');
+}
+
+function applyFilters() {
+  const q      = document.getElementById('search').value.toLowerCase();
+  const status = document.getElementById('status-filter').value;
+  const list   = allProducts.filter(p => {
+    const ms = status === 'all' || p.status === status;
+    const mq = !q || (p.name||'').toLowerCase().includes(q) || (p.category||'').toLowerCase().includes(q) || (vendorMap[p.vendor_id]?.shop_name||'').toLowerCase().includes(q);
+    return ms && mq;
+  });
+  renderProducts(list);
+}
+
+function renderProducts(list) {
+  const grid = document.getElementById('products-grid');
+  if (!list.length) {
+    grid.innerHTML = `<div style="grid-column:1/-1;"><div class="empty"><i class="fas fa-box-open"></i><h3>No products found</h3><p>Try a different filter.</p></div></div>`;
+    return;
+  }
+  grid.innerHTML = list.map(p => productCard(p)).join('');
+}
+
+function productCard(p) {
+  const vendor  = vendorMap[p.vendor_id];
+  const img     = p.images?.[0] || '';
+  const status  = p.status || 'pending';
+  const price   = `₦${Number(p.price||0).toLocaleString()}`;
+  const vname   = vendor?.shop_name || 'Unknown vendor';
+
+  const approveBtn = status !== 'live'
+    ? `<button class="btn-approve-p" onclick="changeStatus('${p.id}','live',this)"><i class="fas fa-check"></i> Approve</button>`
+    : `<button class="btn-pause-p" onclick="changeStatus('${p.id}','paused',this)"><i class="fas fa-pause"></i> Pause</button>`;
+
+  const rejectBtn = status !== 'rejected'
+    ? `<button class="btn-reject-p" onclick="changeStatus('${p.id}','rejected',this)"><i class="fas fa-xmark"></i> Reject</button>`
+    : `<button class="btn-approve-p" onclick="changeStatus('${p.id}','live',this)"><i class="fas fa-check"></i> Approve</button>`;
+
+  return `
+  <div class="product-card status-${status}" id="pc-${p.id}">
+    ${img
+      ? `<img class="pc-img" src="${img}" alt="${p.name}" onclick="openModal('${p.id}')" loading="lazy" />`
+      : `<div class="pc-img-placeholder" onclick="openModal('${p.id}')"><i class="fas fa-mobile-screen-button"></i></div>`
+    }
+    <div class="pc-body">
+      <div class="pc-vendor"><i class="fas fa-store"></i> ${vname}</div>
+      <div class="pc-name">${p.name || '—'}</div>
+      <div class="pc-price">${price}</div>
+      <div class="pc-cat">${p.category || '—'} &middot; Stock: ${p.stock ?? '?'}</div>
+      <div class="pc-footer">
+        <span class="pill pill-${status}">${status}</span>
+        <button style="font-size:12px;color:var(--blue);font-weight:700;background:none;border:none;cursor:pointer;" onclick="openModal('${p.id}')">
+          <i class="fas fa-eye"></i> Details
+        </button>
+      </div>
+      <div class="pc-actions">${approveBtn}${rejectBtn}</div>
+    </div>
+  </div>`;
+}
+
+async function changeStatus(id, status, btn) {
+  btn.disabled = true;
+  try {
+    const vp = allProducts.find(p => p.id === id);
+    await sbPatch(`vendor_products?id=eq.${id}`, { status });
+
+    // Keep the main catalog in sync with this vendor product's approval state
+    if (vp) {
+      if (status === 'live') {
+        const mcId = await syncToMainCatalog(vp);
+        vp.mc_store_product_id = mcId;
+      } else {
+        await unsyncFromMainCatalog(vp);
+      }
+    }
+
+    const idx = allProducts.findIndex(p => p.id === id);
+    if (idx !== -1) allProducts[idx].status = status;
+    updateStats();
+    applyFilters();
+    toast(status === 'live' ? 'Product approved — now live on the main site too' : status === 'rejected' ? 'Product rejected' : 'Product paused', status === 'live' ? 'success' : 'error');
+  } catch(err) {
+    toast('Failed: ' + err.message, 'error');
+    btn.disabled = false;
+  }
+}
+
+function openModal(id) {
+  const p = allProducts.find(x => x.id === id);
+  if (!p) return;
+  const vendor = vendorMap[p.vendor_id];
+  const img = p.images?.[0] || '';
+  const mi = document.getElementById('modal-img');
+  if (img) { mi.src = img; mi.style.display = 'block'; } else { mi.style.display = 'none'; }
+  document.getElementById('modal-title').textContent = p.name || 'Product';
+  document.getElementById('modal-body').innerHTML = `
+    ${p.description ? `<p class="modal-desc">${p.description}</p>` : ''}
+    <div class="modal-info-row"><span class="label">Vendor</span><span class="val">${vendor?.shop_name || '—'}</span></div>
+    <div class="modal-info-row"><span class="label">Price</span><span class="val">₦${Number(p.price||0).toLocaleString()}</span></div>
+    <div class="modal-info-row"><span class="label">Stock</span><span class="val">${p.stock ?? '—'}</span></div>
+    <div class="modal-info-row"><span class="label">Category</span><span class="val">${p.category || '—'}</span></div>
+    <div class="modal-info-row"><span class="label">Status</span><span class="val"><span class="pill pill-${p.status}">${p.status}</span></span></div>
+    <div class="modal-info-row"><span class="label">Listed</span><span class="val">${p.created_at ? new Date(p.created_at).toLocaleDateString('en-NG',{day:'numeric',month:'short',year:'numeric'}) : '—'}</span></div>
+    <div class="modal-actions">
+      ${p.status !== 'live' ? `<button class="btn-approve-p" onclick="changeStatus('${p.id}','live',this);document.getElementById('modal').classList.remove('show')"><i class="fas fa-check"></i> Approve & go live</button>` : ''}
+      ${p.status !== 'rejected' ? `<button class="btn-reject-p" onclick="changeStatus('${p.id}','rejected',this);document.getElementById('modal').classList.remove('show')"><i class="fas fa-xmark"></i> Reject</button>` : ''}
+    </div>
+  `;
+  document.getElementById('modal').classList.add('show');
+}
+
+function closeModal(e) {
+  if (e.target === document.getElementById('modal')) document.getElementById('modal').classList.remove('show');
+}
+
+function toast(msg, type = 'success') {
+  const layer = document.getElementById('toastLayer');
+  const t = document.createElement('div');
+  t.className = `toast ${type}`;
+  t.innerHTML = `<i class="fas ${type==='success'?'fa-check-circle':'fa-circle-xmark'}"></i> ${msg}`;
+  layer.appendChild(t);
+  setTimeout(() => t.remove(), 3000);
+}
+
+loadProducts();
+</script>
+</body>
+</html>
