@@ -328,6 +328,9 @@ function renderOrder() {
     btnCancel.style.display = 'flex';
     btnBook.style.display = 'flex';
     btnBook.style.gridColumn = '1 / -1';
+    btnBook.innerHTML = o.shipbubble_courier_name === 'Vendor delivery'
+      ? '<i class="fas fa-motorcycle"></i> Confirm Dispatch (Vendor Self-Delivery)'
+      : '<i class="fas fa-rocket"></i> Confirm & Book Shipment';
   } else if (status === 'shipped') {
     cmdBar.style.display = 'flex';
     btnApprove.style.display = 'none';
@@ -401,9 +404,35 @@ document.getElementById('btnCancel').onclick = () => {
   showModal();
 };
 
-// BOOK SHIPMENT BUTTON — actually calls Shipbubble
+// BOOK SHIPMENT BUTTON — actually calls Shipbubble (skipped for self-delivery orders)
 document.getElementById('btnBook').onclick = async () => {
   const btn = document.getElementById('btnBook');
+
+  // Self-delivery orders never had a real courier booked — cart.html marks
+  // these with courier_name 'Vendor delivery' and no real courier_id/service_code.
+  // The vendor handles delivery themselves, so there's nothing to book here.
+  const isSelfDelivery = currentOrder.shipbubble_courier_name === 'Vendor delivery';
+
+  if (isSelfDelivery) {
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Updating...';
+    try {
+      const updates = { status: 'shipped', updated_at: new Date().toISOString() };
+      const { error } = await db.from('orders').update(updates).eq('id', orderId);
+      if (error) throw error;
+      Object.assign(currentOrder, updates);
+      if (window.adminLogAction) window.adminLogAction('self_delivery_dispatch', `Order ${currentOrder.order_number} handed to vendor for self-delivery`);
+      document.getElementById('dingSound')?.play().catch(() => {});
+      renderOrder();
+      alert('✅ Marked as dispatched. This vendor is delivering it themselves — no courier is booked. The vendor will mark it "Delivered" once handed over.');
+    } catch (err) {
+      alert('❌ Update failed: ' + err.message);
+      btn.disabled = false;
+      btn.innerHTML = '<i class="fas fa-rocket"></i> Confirm & Book Shipment';
+    }
+    return;
+  }
+
   btn.disabled = true;
   btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Booking with Shipbubble...';
 
