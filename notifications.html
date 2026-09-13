@@ -122,6 +122,16 @@ textarea.form-input{resize:vertical;min-height:80px;}
     <div class="stat-box s-read"><div class="stat-num" id="sTotalRead">—</div><div class="stat-lbl">Total Sent</div></div>
   </div>
 
+  <!-- SENDBABA SYNC — pushes every customer who's ever ordered to SendBaba -->
+  <div style="background:#fff;border:1.5px solid #e2e8f0;border-radius:12px;padding:1rem;margin-bottom:1rem">
+    <div style="font-weight:800;font-size:.85rem;margin-bottom:.3rem">📧 SendBaba Contact Sync</div>
+    <div style="font-size:.78rem;color:#64748b;margin-bottom:.75rem">New orders sync live automatically. Use this to push every past customer — even from years ago — all at once.</div>
+    <button onclick="runContactBackfill()" id="backfillContactsBtn" style="background:#1a56db;color:#fff;border:none;border-radius:8px;padding:.6rem 1.1rem;font-weight:700;font-size:.82rem;cursor:pointer">
+      <i class="fas fa-arrows-rotate"></i> Sync All Past Customers to SendBaba
+    </button>
+    <div id="backfillContactsResult" style="font-size:.78rem;margin-top:.6rem;display:none"></div>
+  </div>
+
   <!-- Quick Templates -->
   <div class="templates-section">
     <div class="section-title">Quick Templates</div>
@@ -193,6 +203,38 @@ textarea.form-input{resize:vertical;min-height:80px;}
 
 <script>
 const SB_URL = 'https://kswikkoqfpyxuurzxail.supabase.co';
+
+window.runContactBackfill = async function() {
+  const btn = document.getElementById('backfillContactsBtn');
+  const resultEl = document.getElementById('backfillContactsResult');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Syncing...';
+  resultEl.style.display = 'none';
+
+  try {
+    const res = await fetch('/api/contacts-sync', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'syncAll' })
+    });
+    const data = await res.json();
+    resultEl.style.display = 'block';
+    if (data.ok) {
+      resultEl.style.color = '#16a34a';
+      resultEl.textContent = `✅ Synced ${data.synced} of ${data.total} customer(s) to SendBaba${data.failed ? ` (${data.failed} failed)` : ''}.`;
+    } else {
+      resultEl.style.color = '#dc2626';
+      resultEl.textContent = `❌ ${data.error || 'Sync failed'}`;
+    }
+  } catch (e) {
+    resultEl.style.display = 'block';
+    resultEl.style.color = '#dc2626';
+    resultEl.textContent = `❌ ${e.message}`;
+  }
+
+  btn.disabled = false;
+  btn.innerHTML = '<i class="fas fa-arrows-rotate"></i> Sync All Past Customers to SendBaba';
+};
 const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imtzd2lra29xZnB5eHV1cnp4YWlsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEzNjEzMDQsImV4cCI6MjA4NjkzNzMwNH0.uuoSKWOTeXot1HJys0EO9OcIRBL0mKrNHIUHIAPCpZ4';
 const db = supabase.createClient(SB_URL, SB_KEY);
 
