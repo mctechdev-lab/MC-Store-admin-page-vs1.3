@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agent approvals · MC Store Admin</title>
+<style>
+  :root { --bg:#f6f7f9; --card:#fff; --ink:#1b1f24; --muted:#5d6672; --line:#dfe3e8;
+          --ok:#14703b; --no:#a32020; --low:#14703b; --medium:#8a5a00; --high:#a32020; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#12151a; --card:#1b2028; --ink:#eef1f4; --muted:#9aa4b0; --line:#2c333d;
+            --ok:#4cc27f; --no:#f07474; --low:#4cc27f; --medium:#e0a93a; --high:#f07474; } }
+  * { box-sizing: border-box; }
+  body { margin:0; font:16px/1.5 system-ui, sans-serif; background:var(--bg); color:var(--ink); }
+  main { max-width:720px; margin:0 auto; padding:16px; }
+  h1 { font-size:1.25rem; margin:0 0 12px; }
+  .tabs { display:flex; gap:8px; margin-bottom:16px; flex-wrap:wrap; }
+  .tabs button { padding:8px 14px; border:1px solid var(--line); border-radius:8px; background:var(--card); color:var(--ink); font:inherit; }
+  .tabs button[aria-pressed="true"] { border-color:var(--ink); font-weight:600; }
+  .item { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:14px; margin-bottom:12px; }
+  .item h2 { font-size:1rem; margin:0 0 4px; }
+  .meta { color:var(--muted); font-size:.875rem; margin-bottom:8px; }
+  .risk-low { color:var(--low); } .risk-medium { color:var(--medium); } .risk-high { color:var(--high); }
+  pre { background:var(--bg); border:1px solid var(--line); border-radius:8px; padding:10px; overflow-x:auto; white-space:pre-wrap; word-break:break-word; font-size:.8125rem; margin:8px 0; max-height:260px; }
+  textarea { width:100%; padding:8px; border:1px solid var(--line); border-radius:8px; background:var(--bg); color:var(--ink); font:inherit; }
+  .row { display:flex; gap:8px; margin-top:8px; }
+  .row button { flex:1; padding:12px; border:0; border-radius:8px; font:inherit; font-weight:600; color:#fff; }
+  .approve { background:var(--ok); } .reject { background:var(--no); }
+  button:disabled { opacity:.5; }
+  button:focus-visible, textarea:focus-visible { outline:3px solid #3b82f6; outline-offset:2px; }
+  .state { color:var(--muted); padding:24px 0; text-align:center; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Agent approvals</h1>
+  <div class="tabs" id="tabs"></div>
+  <div id="list" aria-live="polite"></div>
+</main>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script>
+// Use the same Firebase config as your admin panel.
+const firebaseConfig = { /* apiKey, authDomain, projectId, appId */ };
+firebase.initializeApp(firebaseConfig);
+
+const API = '/api/agent';
+const STATUSES = ['pending', 'approved', 'executed', 'rejected', 'failed'];
+let current = 'pending';
+const listEl = document.getElementById('list');
+
+async function token() {
+  const user = firebase.auth().currentUser;
+  if (!user) throw new Error('Not signed in');
+  return user.getIdToken();
+}
+
+function show(msg) { listEl.replaceChildren(Object.assign(document.createElement('p'), { className: 'state', textContent: msg })); }
+
+function renderTabs() {
+  const tabs = document.getElementById('tabs');
+  tabs.replaceChildren(...STATUSES.map((s) => {
+    const b = document.createElement('button');
+    b.textContent = s[0].toUpperCase() + s.slice(1);
+    b.setAttribute('aria-pressed', s === current);
+    b.onclick = () => { current = s; renderTabs(); load(); };
+    return b;
+  }));
+}
+
+// All agent/vendor text is inserted with textContent, never innerHTML.
+function card(a) {
+  const el = document.createElement('article');
+  el.className = 'item';
+  const h = document.createElement('h2');
+  h.textContent = `${a.task_type.replace(/_/g, ' ')}${a.subject_type ? ' · ' + a.subject_type + ' ' + (a.subject_id || '') : ''}`;
+  const meta = document.createElement('div');
+  meta.className = 'meta';
+  const risk = document.createElement('span');
+  risk.className = 'risk-' + a.risk_level;
+  risk.textContent = a.risk_level + ' risk';
+  meta.append(`${a.agent} · ${new Date(a.created_at).toLocaleString()} · `, risk);
+  el.append(h, meta);
+
+  if (a.reason) { const p = document.createElement('p'); p.textContent = a.reason; el.append(p); }
+  if (a.expected_result) { const p = document.createElement('p'); p.className = 'meta'; p.textContent = 'Expected result: ' + a.expected_result; el.append(p); }
+  const original = JSON.stringify(a.edited_action || a.proposed_action, null, 2);
+  let editor = null;
+  if (a.status === 'pending') {
+    editor = document.createElement('textarea');
+    editor.rows = 10; editor.value = original; editor.spellcheck = false;
+    editor.setAttribute('aria-label', 'Proposed action (editable)');
+    el.append(editor);
+  } else {
+    const pre = document.createElement('pre'); pre.textContent = original; el.append(pre);
+  }
+
+  if (a.status === 'pending') {
+    const note = document.createElement('textarea');
+    note.rows = 2; note.placeholder = 'Note (optional)'; note.setAttribute('aria-label', 'Review note');
+    const row = document.createElement('div'); row.className = 'row';
+    const yes = Object.assign(document.createElement('button'), { className: 'approve', textContent: 'Approve' });
+    const no = Object.assign(document.createElement('button'), { className: 'reject', textContent: 'Reject' });
+    const act = (decision) => async () => {
+      yes.disabled = no.disabled = true;
+      try {
+        let edited;
+        if (decision === 'approve' && editor.value.trim() !== original.trim()) {
+          try { edited = JSON.parse(editor.value); } catch { throw new Error('Your edit is not valid JSON.'); }
+        }
+        await decide(a.id, decision, note.value, edited);
+      } catch (e) { alert(e.message); }
+      load();
+    };
+    yes.onclick = act('approve'); no.onclick = act('reject');
+    row.append(yes, no);
+    el.append(note, row);
+  } else if (a.review_note || a.error) {
+    const p = document.createElement('p'); p.className = 'meta';
+    p.textContent = a.error ? 'Error: ' + a.error : 'Note: ' + a.review_note;
+    el.append(p);
+  }
+  return el;
+}
+
+async function decide(id, decision, note, edited_action) {
+  const r = await fetch(API, { method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + await token() },
+    body: JSON.stringify({ op: 'decide', id, decision, note, edited_action }) });
+  if (!r.ok) throw new Error((await r.json()).error || 'Request failed');
+}
+
+async function load() {
+  show('Loading…');
+  try {
+    const r = await fetch(`${API}?status=${current}`, { headers: { Authorization: 'Bearer ' + await token() } });
+    if (r.status === 401) return show('Sign in with an admin account to view approvals.');
+    if (!r.ok) return show('Could not load actions. Try again.');
+    const { actions } = await r.json();
+    if (!actions.length) return show(current === 'pending' ? 'Nothing waiting for approval.' : 'No ' + current + ' actions yet.');
+    listEl.replaceChildren(...actions.map(card));
+  } catch (e) { show('Sign in with an admin account to view approvals.'); }
+}
+
+renderTabs();
+firebase.auth().onAuthStateChanged((u) => (u ? load() : show('Sign in with an admin account to view approvals.')));
+</script>
+</body>
+</html>
