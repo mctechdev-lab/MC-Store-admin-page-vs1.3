@@ -4,7 +4,7 @@
 const CLOUD_NAME = 'dluuvtjph';
 const UPLOAD_PRESET = 'ml_default';
 const SB_URL = 'https://kswikkoqfpyxuurzxail.supabase.co';
-const SB_SERVICE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imtzd2lra29xZnB5eHV1cnp4YWlsIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MTM2MTMwNCwiZXhwIjoyMDg2OTM3MzA0fQ.Z5UvrKaNwUB2fPbcGRnSkw773X7oL9kE3u5PbUay9mI';
+const SB_SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';  // set in Vercel env vars, never in code
 
 // Upload single image to Cloudinary
 async function uploadToCloudinary(base64Image, fileName) {
@@ -29,6 +29,7 @@ async function uploadToCloudinary(base64Image, fileName) {
 
 // Save product to Supabase using service role key
 async function saveToSupabase(product) {
+  if (!SB_SERVICE_KEY) throw new Error('Server is not configured (missing database key)');
   const res = await fetch(`${SB_URL}/rest/v1/products`, {
     method: 'POST',
     headers: {
