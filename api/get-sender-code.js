@@ -5,8 +5,8 @@ export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   if (req.method === 'OPTIONS') return res.status(200).end();
 
-  const KEY  = process.env.SHIPBUBBLE_API_KEY ||
-    'sb_prod_4e080eb614d512ca670304775edc1cee9c75df92bf3c06fe82fee00714b44b3a';
+  const KEY  = process.env.SHIPBUBBLE_API_KEY || '';   // set in Vercel env vars, never in code
+  if (!KEY) return res.status(500).json({ ok: false, error: 'SHIPBUBBLE_API_KEY not set in Vercel env vars' });
   const BASE = 'https://api.shipbubble.com/v1';
   const hdrs = {
     Authorization:  `Bearer ${KEY}`,
@@ -49,7 +49,6 @@ export default async function handler(req, res) {
 
   return res.status(200).json({
     addresses,
-    wallet,
-    key_prefix: KEY.slice(0, 18) + '...'
+    wallet
   });
         }

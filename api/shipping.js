@@ -13,8 +13,7 @@
 //    ships from their own address, not MC Store's
 // ============================================================
 
-const KEY  = process.env.SHIPBUBBLE_API_KEY ||
-  'sb_prod_4e080eb614d512ca670304775edc1cee9c75df92bf3c06fe82fee00714b44b3a';
+const KEY  = process.env.SHIPBUBBLE_API_KEY || '';   // set in Vercel env vars, never in code
 const BASE = 'https://api.shipbubble.com/v1';
 
 const SUPA_URL     = 'https://kswikkoqfpyxuurzxail.supabase.co';
@@ -200,12 +199,13 @@ export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST')   return res.status(405).json({ ok: false });
+  if (!KEY) return res.status(500).json({ ok: false, error: 'SHIPBUBBLE_API_KEY not set in Vercel env vars' });
 
   const { action, payload = {} } = req.body || {};
 
-  // ══════════════════════════════════════
+  // ════════════════════════════════════════════════
   //  GET RATES — customer checkout / admin testing
-  // ══════════════════════════════════════
+  // ════════════════════════════════════════════════
   if (action === 'getRates') {
     const { recipientAddress, items = [], vendor_id = null } = payload;
 
@@ -285,11 +285,11 @@ export default async function handler(req, res) {
     return res.status(200).json({ ok: true, rates, request_token: token });
   }
 
-  // ══════════════════════════════════════
+  // ════════════════════════════════════════════════
   //  VALIDATE SENDER (kept for manual override / troubleshooting —
   //  not needed for normal operation anymore, since sender codes now
   //  auto-generate and persist on their own)
-  // ══════════════════════════════════════
+  // ════════════════════════════════════════════════
   if (action === 'registerSender') {
     const { name, email, phone, address, city, state } = payload;
     if (!address || !city || !state) {
@@ -319,9 +319,9 @@ export default async function handler(req, res) {
     });
   }
 
-  // ══════════════════════════════════════
+  // ════════════════════════════════════════════════
   //  BOOK SHIPMENT (admin confirms order)
-  // ══════════════════════════════════════
+  // ════════════════════════════════════════════════
   if (action === 'bookShipment') {
     const { order } = payload;
     if (!order) return res.status(400).json({ ok: false, error: 'No order provided' });
@@ -385,9 +385,9 @@ export default async function handler(req, res) {
     });
   }
 
-  // ══════════════════════════════════════
+  // ════════════════════════════════════════════════
   //  DEBUG
-  // ══════════════════════════════════════
+  // ════════════════════════════════════════════════
   if (action === 'debug') {
     const mcStoreCode = await getMcStoreSenderCode();
     const [wallet, cats, addrs] = await Promise.all([
@@ -400,7 +400,7 @@ export default async function handler(req, res) {
       '14 Admiralty Way, Lekki Phase 1, Lagos, Nigeria'
     );
     return res.status(200).json({
-      api_key_prefix:      KEY.slice(0, 20) + '...',
+      api_key_set:         true,
       mc_store_sender_code: mcStoreCode,
       wallet:              wallet.data,
       categories:          cats.data,
