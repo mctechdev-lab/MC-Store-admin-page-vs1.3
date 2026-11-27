@@ -7,6 +7,7 @@
 // years-old) has placed at least one order, so `orders` is the reliable
 // source of truth for "who are our actual customers."
 
+const A = require('../lib/admin-session.js');
 const SB_URL  = 'https://kswikkoqfpyxuurzxail.supabase.co';
 const SB_KEY  = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 const BREVO_KEY = process.env.BREVO_API_KEY || '';
@@ -64,10 +65,8 @@ async function pushToBrevo(contact) {
 }
 
 module.exports = async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-  if (req.method === 'OPTIONS') return res.status(200).end();
+  // reading the list needs users.read; pushing everyone to Brevo is owner-only
+  const admin = A.requireAdmin(req, res, req.method === 'GET' ? 'users.read' : 'contacts.sync'); if (!admin) return;
 
   if (!SB_KEY) {
     return res.status(500).json({ ok: false, error: 'SUPABASE_SERVICE_ROLE_KEY not set in Vercel env vars' });
