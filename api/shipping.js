@@ -13,6 +13,8 @@
 //    ships from their own address, not MC Store's
 // ============================================================
 
+import A from '../lib/admin-session.js';
+
 const KEY  = process.env.SHIPBUBBLE_API_KEY || '';   // set in Vercel env vars, never in code
 const BASE = 'https://api.shipbubble.com/v1';
 
@@ -194,11 +196,9 @@ async function resolveSenderCode(vendorId) {
 //  MAIN HANDLER
 // ════════════════════════════════════════
 export default async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin',  '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-  if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST')   return res.status(405).json({ ok: false });
+  const __perm = ['registerSender', 'debug'].includes((req.body || {}).action) ? 'shipping.use' : 'orders.write';
+  const admin = A.requireAdmin(req, res, __perm); if (!admin) return;
   if (!KEY) return res.status(500).json({ ok: false, error: 'SHIPBUBBLE_API_KEY not set in Vercel env vars' });
 
   const { action, payload = {} } = req.body || {};
