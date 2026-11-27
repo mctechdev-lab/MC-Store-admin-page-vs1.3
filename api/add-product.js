@@ -1,6 +1,7 @@
 // api/add-product.js — Complete product upload serverless function
 // Handles: Image upload to Cloudinary + Save to Supabase database
 
+import A from '../lib/admin-session.js';
 const CLOUD_NAME = 'dluuvtjph';
 const UPLOAD_PRESET = 'ml_default';
 const SB_URL = 'https://kswikkoqfpyxuurzxail.supabase.co';
@@ -47,11 +48,8 @@ async function saveToSupabase(product) {
 }
 
 export default async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-  if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST') return res.status(405).json({ ok: false, error: 'Method not allowed' });
+  const admin = A.requireAdmin(req, res, 'products.write'); if (!admin) return;
 
   try {
     const { action, images, product } = req.body || {};
