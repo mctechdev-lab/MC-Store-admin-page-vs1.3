@@ -1,9 +1,7 @@
 // api/get-sender-code.js — fetch existing Shipbubble addresses
+import A from '../lib/admin-session.js';
 export default async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-  if (req.method === 'OPTIONS') return res.status(200).end();
+  const admin = A.requireAdmin(req, res, 'shipping.use'); if (!admin) return;
 
   const KEY  = process.env.SHIPBUBBLE_API_KEY || '';   // set in Vercel env vars, never in code
   if (!KEY) return res.status(500).json({ ok: false, error: 'SHIPBUBBLE_API_KEY not set in Vercel env vars' });

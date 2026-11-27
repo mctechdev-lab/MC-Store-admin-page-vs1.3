@@ -5,6 +5,7 @@
 // ============================================================
 
 import admin from "firebase-admin";
+import A from "../lib/admin-session.js";
 
 // ── Firebase Admin — safe init ──
 try {
@@ -54,11 +55,8 @@ async function getSupabaseMap() {
 
 // ── Main handler ──
 export default async function handler(req, res) {
-  res.setHeader("Access-Control-Allow-Origin",  "*");
-  res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
-  if (req.method === "OPTIONS") return res.status(200).end();
   if (req.method !== "GET")    return res.status(405).json({ success: false, error: "Method not allowed" });
+  const adminSession = A.requireAdmin(req, res, "users.read"); if (!adminSession) return;
 
   try {
     // ── 1. Firebase Auth — list all users ──

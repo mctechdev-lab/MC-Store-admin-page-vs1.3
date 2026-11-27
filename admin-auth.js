@@ -1,141 +1,89 @@
 // ============================================================
-//  admin-auth.js — MC Store Admin Authentication
-//  Uses server-side password check via /api/admin-auth
-//  Password lives ONLY in Vercel env vars — never in browser
+//  admin-auth.js — MC Store Admin (browser side)
+//
+//  The browser holds NO secret. Sign-in happens on the server (/api/admin-auth),
+//  which sets an HttpOnly cookie that scripts cannot read. The small
+//  "mc_admin_info" value kept here (email + role) is only a hint for showing
+//  the right screen — every API call is checked again by the server.
 // ============================================================
 
-const LOGIN_PAGE  = 'index.html';
-const SESSION_KEY = 'mc_admin_tok';
-const SESSION_TTL = 8 * 60 * 60 * 1000; // 8 hours
+const LOGIN_PAGE = 'index.html';
+const INFO_KEY   = 'mc_admin_info';
 
-// ── Save session ──
-function _saveSession(token, email) {
-  const s = { token, email: email || 'admin', savedAt: Date.now() };
-  localStorage.setItem(SESSION_KEY, JSON.stringify(s));
-  return s;
+function _info() {
+  try { return JSON.parse(localStorage.getItem(INFO_KEY) || 'null'); } catch { return null; }
+}
+function _setInfo(i) { try { localStorage.setItem(INFO_KEY, JSON.stringify(i)); } catch {} }
+function _clearInfo() { try { localStorage.removeItem(INFO_KEY); } catch {} }
+
+async function _post(body) {
+  const r = await fetch('/api/admin-auth', {
+    method: 'POST', credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+  let d = {}; try { d = await r.json(); } catch {}
+  return { status: r.status, data: d };
 }
 
-// ── Get stored session ──
-function _getSession() {
-  try {
-    const raw = localStorage.getItem(SESSION_KEY);
-    if (!raw) return null;
-    const s = JSON.parse(raw);
-    if (Date.now() - s.savedAt > SESSION_TTL) {
-      localStorage.removeItem(SESSION_KEY);
-      return null;
-    }
-    return s;
-  } catch { return null; }
+function _redirectToLogin(msg) {
+  _clearInfo();
+  if (msg) { try { sessionStorage.setItem('adminLoginMsg', msg); } catch {} }
+  const path = window.location.pathname;
+  if (!path.endsWith('index.html') && !path.endsWith('/')) window.location.href = LOGIN_PAGE;
 }
 
-// ── Verify token with server ──
-async function _verifyToken(token) {
+// ── Login ──
+async function adminLogin({ email, password }) {
+  if (!email || !password) return { success: false, error: 'Please enter your email and password.' };
   try {
-    const r = await fetch('/api/admin-auth', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'verify', token })
-    });
-    const d = await r.json();
-    return d.ok === true;
-  } catch { return false; }
-}
-
-// ============================================================
-//  ADMIN LOGIN
-// ============================================================
-async function adminLogin({ password }) {
-  if (!password) return { success: false, error: 'Please enter your password.' };
-  try {
-    const r = await fetch('/api/admin-auth', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ password })
-    });
-    const d = await r.json();
-    if (d.ok) {
-      _saveSession(d.token, 'admin@mcstore.ng');
-      return { success: true };
-    }
-    return { success: false, error: d.error || 'Wrong password. Please try again.' };
+    const { data } = await _post({ action: 'login', email, password });
+    if (data.ok) { _setInfo({ email: data.email, role: data.role }); return { success: true, role: data.role }; }
+    return { success: false, error: data.error || 'Wrong email or password. Please try again.' };
   } catch (e) {
     return { success: false, error: 'Network error. Check your connection.' };
   }
 }
 
-// ============================================================
-//  VERIFY ADMIN — call on every protected page
-// ============================================================
+// ── Ask the server whether we are signed in (call on every protected page) ──
 async function verifyAdmin() {
-  const s = _getSession();
-  if (!s) { _redirectToLogin('Please sign in.'); return null; }
-
-  // Refresh TTL
-  s.savedAt = Date.now();
-  localStorage.setItem(SESSION_KEY, JSON.stringify(s));
-  return s;
+  try {
+    const { status, data } = await _post({ action: 'me' });
+    if (status === 200 && data.ok) { const i = { email: data.email, role: data.role }; _setInfo(i); return i; }
+  } catch (e) { return _info(); }       // offline: keep showing the page; the server still blocks every action
+  _redirectToLogin('Please sign in.');
+  return null;
 }
 
-// ============================================================
-//  GET USER / SESSION
-// ============================================================
-function getAdminUser() { return _getSession(); }
-async function getAdminSession() { return _getSession(); }
-function isAdminLoggedIn() { return !!_getSession(); }
+function getAdminUser()       { return _info(); }
+async function getAdminSession() { return _info(); }
+function isAdminLoggedIn()    { return !!_info(); }
 
-// ============================================================
-//  LOGOUT
-// ============================================================
 async function adminLogout() {
-  localStorage.removeItem(SESSION_KEY);
+  try { await _post({ action: 'logout' }); } catch {}
+  _clearInfo();
   window.location.href = LOGIN_PAGE;
 }
 
-// ============================================================
-//  SESSION KEEP-ALIVE
-// ============================================================
+// re-check with the server every 10 minutes
 function startSessionRefresh() {
-  setInterval(() => {
-    const s = _getSession();
-    if (!s) { _redirectToLogin('Session expired.'); return; }
-    s.savedAt = Date.now();
-    localStorage.setItem(SESSION_KEY, JSON.stringify(s));
-  }, 15 * 60 * 1000);
+  setInterval(() => { verifyAdmin(); }, 10 * 60 * 1000);
 }
 
-// ── Redirect helper ──
-function _redirectToLogin(msg) {
-  if (msg) sessionStorage.setItem('adminLoginMsg', msg);
-  const path = window.location.pathname;
-  if (!path.endsWith('index.html') && !path.endsWith('/')) {
-    window.location.href = LOGIN_PAGE;
-  }
-}
-
-// ── Audit log (Supabase) ──
-const SB_URL = 'https://kswikkoqfpyxuurzxail.supabase.co';
-const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imtzd2lra29xZnB5eHV1cnp4YWlsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEzNjEzMDQsImV4cCI6MjA4NjkzNzMwNH0.uuoSKWOTeXot1HJys0EO9OcIRBL0mKrNHIUHIAPCpZ4';
-
+// Audit entries are written by the SERVER (the old browser-side write could be forged)
 async function _logAction(action, detail) {
   try {
-    await fetch(`${SB_URL}/rest/v1/admin_audit_log`, {
-      method: 'POST',
-      headers: { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
-      body: JSON.stringify({ admin_uid: 'owner', admin_email: 'admin@mcstore.ng', action, detail: String(detail).slice(0, 500), created_at: new Date().toISOString() })
-    });
+    await _post({ action: 'audit', event: String(action).toLowerCase().replace(/[^a-z0-9_]/g, '_').slice(0, 60), detail: String(detail || '').slice(0, 400) });
   } catch {}
 }
-
 window.adminLogAction = _logAction;
 
-// ── Global export ──
 window.adminAuth = {
-  adminLogin,
-  adminLogout,
-  verifyAdmin,
-  getAdminSession,
-  getAdminUser,
-  isAdminLoggedIn,
-  startSessionRefresh,
+  adminLogin, adminLogout, verifyAdmin, getAdminSession, getAdminUser, isAdminLoggedIn, startSessionRefresh,
 };
+
+// Every page that loads this file (except the login page) confirms with the server on load.
+(function () {
+  const p = window.location.pathname;
+  if (!p.endsWith('index.html') && !p.endsWith('/')) verifyAdmin();
+})();
