@@ -62,7 +62,15 @@ html,body{min-height:100vh;background:var(--bg);font-family:'DM Sans',sans-serif
   <div class="card">
     <div class="sec-badge"><i class="fas fa-shield-halved"></i> Secure Admin Access</div>
     <div class="card-title">Welcome back</div>
-    <div class="card-sub">Enter your admin password to continue</div>
+    <div class="card-sub">Sign in with your admin email and password</div>
+
+    <div class="field">
+      <div class="field-label"><i class="fas fa-envelope"></i> Admin Email</div>
+      <div class="input-wrap">
+        <i class="fas fa-envelope input-icon"></i>
+        <input type="email" id="emailInput" placeholder="you@mcstore.com.ng" autocomplete="username">
+      </div>
+    </div>
 
     <div class="field">
       <div class="field-label"><i class="fas fa-lock"></i> Admin Password</div>
@@ -117,6 +125,7 @@ function showToast(msg, type = 'info') {
 }
 
 async function handleLogin() {
+  const email    = document.getElementById('emailInput').value.trim();
   const password = document.getElementById('passwordInput').value;
   const btn      = document.getElementById('loginBtn');
   const errEl    = document.getElementById('globalError');
@@ -124,8 +133,8 @@ async function handleLogin() {
   errEl.classList.remove('show');
   document.getElementById('passwordInput').classList.remove('error');
 
-  if (!password) {
-    errEl.textContent = 'Please enter your password.';
+  if (!email || !password) {
+    errEl.textContent = 'Please enter your email and password.';
     errEl.classList.add('show');
     return;
   }
@@ -133,13 +142,13 @@ async function handleLogin() {
   btn.disabled = true;
   btn.innerHTML = '<div class="spinner"></div> Signing in…';
 
-  const result = await window.adminAuth.adminLogin({ password });
+  const result = await window.adminAuth.adminLogin({ email, password });
 
   if (result.success) {
     showToast('Access granted! Loading dashboard…', 'success');
     setTimeout(() => { window.location.href = 'appskeleton.html'; }, 700);
   } else {
-    errEl.textContent = result.error || 'Wrong password. Please try again.';
+    errEl.textContent = result.error || 'Wrong email or password. Please try again.';
     errEl.classList.add('show');
     document.getElementById('passwordInput').classList.add('error');
     document.getElementById('passwordInput').value = '';
